@@ -1,0 +1,13 @@
+{
+  "name": "Duellhalle",
+  "short_name": "Duellhalle",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffcf24",
+  "theme_color": "#ffcf24",
+  "icons": [
+    { "src": "icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
