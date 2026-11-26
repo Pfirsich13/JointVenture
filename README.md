@@ -2,7 +2,7 @@
 
 Unsere private PvP-Spieleseite: Startseite mit Spielekacheln, Echtzeit-Duelle von Handy zu Handy.
 
-- **Spielen:** https://pfirsich13.github.io/duellhalle/
+- **Spielen:** https://pfirsich13.github.io/soutgames.com/
 - **Aufs iPhone als App:** Link in Safari öffnen → Teilen → „Zum Home-Bildschirm“
 
 ## Aufbau
