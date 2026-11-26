@@ -22,7 +22,8 @@
     wallBounce: 0.88,        // Abprall an der Bande
     hitBounce: 0.92,         // Abprall am Schläger
     winScore: 7,             // Tore zum Sieg
-    sendHz: 30,              // Nachrichten pro Sekunde
+    sendHz: 30,              // Nachrichten pro Sekunde (Claude-Raum)
+    sendHzP2P: 45,           // Nachrichten pro Sekunde (direkt Handy zu Handy)
     goalPause: 1.4,          // Pause nach einem Tor (Sekunden)
     countdown: 3,            // Countdown vor dem Anpfiff
     fingerOffset: 0.035,     // Schläger sitzt etwas über dem Finger
@@ -39,7 +40,13 @@
 
   /* ---------- Spielzustand ---------- */
   let puck, pads, score, phase, phaseUntil, owner;
-  let gs = 0, rm = 0, pkSeq = 0, lastPkSeq = 0, handoffUntil = 0, recorded = -1;
+  let gs = 0, rm = 0, recorded = -1;
+  // Online-Scheibe: "Epoche" zählt jeden Besitzerwechsel, q nummeriert die Nachrichten darin
+  let epoch = 0, q = 0, lastQ = 0, handoffUntil = 0;
+  let latency = 0.05, lastRxT = 0, lastRxLocal = 0;     // gemessene Verzögerung (eine Richtung, Sekunden)
+  // Puffer mit echten Positionen vom anderen Handy (für ruckelfreie Anzeige auf seiner Hälfte)
+  const snaps = []; let clockOff = null;
+  const RENDER_DELAY = 0.07;                              // so weit (s) zeigen wir die gegnerische Seite "in der Vergangenheit"
   let rPuck = { x: 0.5, y: H / 2 };     // gezeichnete (geglättete) Scheibe
   const trail = [], rings = [];
   let shake = 0, flash = null, lastHitSnd = 0;
@@ -51,7 +58,7 @@
     score = { b: 0, t: 0 };
     pads = { b: freshPad('b'), t: freshPad('t') };
     servePuck('b');
-    pkSeq = 0; lastPkSeq = 0; handoffUntil = 0;
+    epoch = 0; q = 0; lastQ = 0; handoffUntil = 0; snaps.length = 0;
     phase = 'count'; phaseUntil = now + CFG.countdown;
   }
   const other = (s) => (s === 'b' ? 't' : 'b');
@@ -199,23 +206,47 @@
 
   /* ---------- Online ---------- */
   function buildMsg() {
-    const me = pads[myRole];
-    const m = { n: hub.getName(), pd: [r3(me.x), r3(me.y), r3(me.vx), r3(me.vy)], sc: [score.b, score.t], gs, rm, ph: phase };
-    if (owner === myRole) pkSeq++;                // jede Besitzer-Nachricht bekommt eine neue Nummer
-    if (owner === myRole || now < handoffUntil) m.pk = { x: r3(puck.x), y: r3(puck.y), vx: r3(puck.vx), vy: r3(puck.vy), o: owner, s: pkSeq };
+    const me = pads[myRole], tms = Math.round(performance.now());
+    const m = { n: hub.getName(), pd: [r3(me.x), r3(me.y), r3(me.vx), r3(me.vy)], sc: [score.b, score.t], gs, rm, ph: phase,
+      t: tms, et: lastRxT, eh: lastRxT ? Math.round(tms - lastRxLocal) : 0 };
+    if (owner === myRole) q++;
+    if (owner === myRole || now < handoffUntil) m.pk = { x: r3(puck.x), y: r3(puck.y), vx: r3(puck.vx), vy: r3(puck.vy), o: owner, e: epoch, q };
     return m;
   }
   const r3 = (v) => Math.round(v * 1000) / 1000;
   const num = (v, d = 0) => (Number.isFinite(+v) ? +v : d);
   function sendNow() { if (conn && (conn.status === 'connected' || conn.status === 'stalled')) conn.send(buildMsg()); }
+  // Scheibe um die Laufzeit der Nachricht nach vorne rechnen
+  function catchUp(p, secs) {
+    let left = Math.min(0.25, Math.max(0, secs));
+    while (left > 0) { const h = Math.min(0.016, left); stepPuck(p, h, false, false); left -= h; }
+  }
+  function adoptPuck(pk) {
+    puck.x = num(pk.x, puck.x); puck.y = num(pk.y, puck.y); puck.vx = num(pk.vx); puck.vy = num(pk.vy);
+    catchUp(puck, latency);
+  }
 
   function onMessage(m) {
     if (!m || typeof m !== 'object') return;
     if (typeof m.n === 'string' && m.n.trim()) oppName = m.n.trim().slice(0, 16);
+    // Verzögerung messen: unsere Zeitmarke kommt zurück
+    const nowMs = performance.now();
+    if (num(m.t)) {
+      lastRxT = num(m.t); lastRxLocal = nowMs;
+      // Uhrenabgleich: kleinste beobachtete Differenz = Uhrversatz + schnellste Laufzeit
+      const off = nowMs - num(m.t);
+      clockOff = clockOff === null ? off : Math.min(clockOff + 0.02, off);
+    }
+    if (num(m.et) > 0) {
+      const rtt = (nowMs - num(m.et) - num(m.eh)) / 1000;
+      if (rtt > 0 && rtt < 2) latency = latency * 0.85 + (rtt / 2) * 0.15;
+    }
     const opp = pads[other(myRole)];
     if (Array.isArray(m.pd)) {
       opp.tx = num(m.pd[0], opp.tx); opp.ty = num(m.pd[1], opp.ty);
       opp.vx = num(m.pd[2]); opp.vy = num(m.pd[3]);
+      // Gegner-Schläger ebenfalls um die Laufzeit vorausschätzen
+      opp.tx += opp.vx * latency * 0.5; opp.ty += opp.vy * latency * 0.5;
     }
     const mrm = num(m.rm);
     if (mrm > rm) { rm = mrm; resetMatch(); hidePanel(); }
@@ -225,12 +256,25 @@
       gs = mgs; score.b = num(m.sc[0]); score.t = num(m.sc[1]);
       afterGoal(m.pk && (m.pk.o === 'b' || m.pk.o === 't') ? m.pk.o : other(myRole), false);
     }
-    if (m.pk && num(m.pk.s) > lastPkSeq) {
-      lastPkSeq = num(m.pk.s);
-      const p = m.pk;
-      puck.x = num(p.x, puck.x); puck.y = num(p.y, puck.y); puck.vx = num(p.vx); puck.vy = num(p.vy);
-      owner = p.o === 'b' || p.o === 't' ? p.o : owner;
-      if (owner === myRole) pkSeq = lastPkSeq; else stepPuck(puck, 0.03, false, false); // Laufzeit grob ausgleichen
+    const pk = m.pk;
+    if (pk && (pk.o === 'b' || pk.o === 't')) {
+      const e = num(pk.e), mq = num(pk.q);
+      if (e > epoch) {
+        // neuer Besitzer
+        const iAlreadyOwn = owner === myRole && pk.o === myRole;   // ich hatte sie schon selbst übernommen
+        epoch = e; lastQ = mq; owner = pk.o;
+        if (!iAlreadyOwn) adoptPuck(pk);
+      } else if (e === epoch && pk.o !== myRole && owner !== myRole && mq > lastQ) {
+        lastQ = mq; adoptPuck(pk);                                // laufende Updates vom Besitzer
+      }
+      if (pk.o !== myRole && e >= epoch && clockOff !== null && num(m.t)) {
+        // echte Position mit Zeitstempel merken (Zeit in unserer Uhr)
+        const t = (num(m.t) + clockOff) / 1000;
+        if (!snaps.length || t > snaps[snaps.length - 1].t) {
+          snaps.push({ t, x: num(pk.x), y: num(pk.y), vx: num(pk.vx), vy: num(pk.vy), e });
+          if (snaps.length > 40) snaps.shift();
+        }
+      }
     }
     if (m.ph === 'play' && phase === 'count' && now < phaseUntil - 0.3) phaseUntil = now + 0.3; // Countdown angleichen
   }
@@ -283,19 +327,35 @@
       setTimeout(() => { if (alive && phase === 'over') showPanel('over'); }, 900);
       if (recorded !== rm && mode !== 'local') {
         recorded = rm;
-        hub.recordResult('airhockey', mode === 'online' ? 'online' : 'bot', score[myRole] > score[other(myRole)], mode === 'online' ? oppName : '');
+        hub.recordResult('airhockey', mode === 'online' ? 'online' : 'bot', score[myRole] > score[other(myRole)], mode === 'online' ? oppName : 'Bot', score[myRole] + ':' + score[other(myRole)]);
       }
     }
   }
   function goalBy(conceder) {
     score[other(conceder)]++; gs++;
-    servePuck(conceder); pkSeq++;
+    servePuck(conceder); epoch++; q = 0;
     afterGoal(conceder, true);
     if (mode === 'online') sendNow();
   }
   function rematch() {
     if (mode === 'online') { rm++; recorded = -1; resetMatch(); hidePanel(); sendNow(); }
     else startOffline(mode);
+  }
+
+  /* Position der Scheibe zum Zeitpunkt "jetzt minus Puffer" aus den echten Daten */
+  function interpolated() {
+    if (snaps.length === 0) return null;
+    const t = now - RENDER_DELAY;
+    while (snaps.length > 2 && snaps[1].t <= t) snaps.shift();
+    const a = snaps[0], b = snaps[1];
+    if (a.e < epoch && owner !== myRole && snaps.length === 1) return null;
+    if (!b || t >= b.t) {                                     // nichts Neueres: kurz weiterrechnen
+      const last = b || a, dt = Math.min(0.12, Math.max(0, t - last.t));
+      return [last.x + last.vx * dt, last.y + last.vy * dt];
+    }
+    if (t <= a.t) return [a.x, a.y];
+    const k = (t - a.t) / (b.t - a.t);
+    return [a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k];
   }
 
   /* ---------- Hauptschleife ---------- */
@@ -327,21 +387,27 @@
         if (c) goalBy(c);
         else {
           const side = puck.y > H / 2 ? 'b' : 't';
-          if (side !== myRole) { owner = side; pkSeq++; handoffUntil = now + 0.6; sendNow(); }
+          if (side !== myRole) { owner = side; epoch++; q = 0; handoffUntil = now + 0.6; sendNow(); }
         }
       } else {
         stepPuck(puck, dt, false, false);                       // nur vorhersagen
+        // Kommt die Scheibe deutlich auf meine Seite, übernehme ich sofort (wartet nicht aufs Netz)
+        const deep = myRole === 'b' ? puck.y > H / 2 + 0.04 : puck.y < H / 2 - 0.04;
+        if (deep) { owner = myRole; epoch++; q = 0; sendNow(); }
       }
     }
     // gezeichnete Scheibe glätten
-    const jump = Math.hypot(puck.x - rPuck.x, puck.y - rPuck.y);
-    if (owner === myRole || mode !== 'online' || jump > 0.25) { rPuck.x = puck.x; rPuck.y = puck.y; }
-    else { const k = 1 - Math.exp(-dt * 30); rPuck.x += (puck.x - rPuck.x) * k; rPuck.y += (puck.y - rPuck.y) * k; }
+    let tx = puck.x, ty = puck.y;
+    if (mode === 'online' && owner !== myRole) { const ip = interpolated(); if (ip) { tx = ip[0]; ty = ip[1]; } }
+    const jump = Math.hypot(tx - rPuck.x, ty - rPuck.y);
+    if (mode !== 'online' || jump > 0.35) { rPuck.x = tx; rPuck.y = ty; }
+    else { const k = 1 - Math.exp(-dt * (owner === myRole ? 28 : 40)); rPuck.x += (tx - rPuck.x) * k; rPuck.y += (ty - rPuck.y) * k; }
     trail.push({ x: rPuck.x, y: rPuck.y }); if (trail.length > 10) trail.shift();
 
     if (mode === 'online') {
       sendAcc += dt;
-      if (sendAcc >= 1 / CFG.sendHz) { sendAcc = 0; sendNow(); }
+      const hz = conn && conn.transport === 'p2p' ? CFG.sendHzP2P : CFG.sendHz;
+      if (sendAcc >= 1 / hz) { sendAcc = 0; sendNow(); }
     }
   }
 
@@ -448,7 +514,8 @@
   function draw() {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#ffcf24'; ctx.fillRect(0, 0, cw, ch);
+    const bg = ctx.createLinearGradient(0, 0, 0, ch); bg.addColorStop(0, '#5aa9ff'); bg.addColorStop(1, '#cfeaff');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, cw, ch);
     if (!pads) return;
     view.flip = mode === 'online' && myRole === 't';
     if (!felt || felt.flip !== view.flip) { buildFelt(); felt.flip = view.flip; }
@@ -480,7 +547,7 @@
     const [px, py] = toTable(rPuck.x, rPuck.y);
     ctx.fillStyle = 'rgba(22,19,15,.25)'; ctx.beginPath(); ctx.arc(px + pr * 0.15, py + pr * 0.25, pr, 0, 7); ctx.fill();
     ctx.fillStyle = '#16130f'; ctx.beginPath(); ctx.arc(px, py, pr, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#ffcf24'; ctx.lineWidth = Math.max(2, pr * 0.22); ctx.beginPath(); ctx.arc(px, py, pr * 0.55, 0, 7); ctx.stroke();
+    ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = Math.max(2, pr * 0.22); ctx.beginPath(); ctx.arc(px, py, pr * 0.55, 0, 7); ctx.stroke();
 
     // Schläger: ich blau, Gegner rot
     const blueSide = mode === 'local' ? 'b' : myRole;
@@ -624,6 +691,7 @@
     addEventListener('pagehide', closeConn);
     mode = null; pads = null; resize();
     showPanel('menu');
+    if (hub.intent === 'bot') startOffline('bot');
     lastT = performance.now() / 1000;
     raf = requestAnimationFrame(loop);
   }
@@ -636,5 +704,5 @@
   }
 
   window.Games = window.Games || {};
-  window.Games.airhockey = { start, stop, CFG, _steer: (fn) => { testSteer = fn; }, _debug: () => ({ mode, myRole, phase, owner, score: score && { ...score }, gs, rm, puck: puck && { ...puck }, conn: conn && conn.status }) };
+  window.Games.airhockey = { start, stop, CFG, _steer: (fn) => { testSteer = fn; }, _debug: () => ({ rp: { x: rPuck.x, y: rPuck.y }, latency, epoch, mode, myRole, phase, owner, score: score && { ...score }, gs, rm, puck: puck && { ...puck }, conn: conn && conn.status }) };
 })();
