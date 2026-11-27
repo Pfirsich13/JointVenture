@@ -49,6 +49,26 @@ Eine kleine, private Spieleseite nur für zwei Brüder. Man öffnet die Seite, s
 - Deutsche Texte in der Oberfläche, verständliche Kommentare im Code
 - Keine externen Abhängigkeiten außer PeerJS (feste Version) und bei Bedarf three.js
 
+## Neue Spiele veröffentlichen (Ablauf mit Freigabe)
+Website: https://pfirsich13.github.io/JointVenture/ · Code: GitHub-Repository `Pfirsich13/JointVenture` (Branch `main`, GitHub Pages) · Datenbank: Supabase-Projekt `jointventure` (ID `gekavukdzlhnhgpjyyyd`).
+
+**Weg A – Claude baut das Spiel (empfohlen, voll eingebunden):**
+1. Das Spiel ist ein Modul `js/games/<id>.js`, das `window.Games['<id>'] = { start(el, hub), stop() }` bereitstellt. `<id>` nur a-z, 0-9 und Bindestrich.
+   - `el` ist der Vollbild-Container, `hub.getName()` liefert den Spielernamen, `hub.back()` führt zurück zur Startseite.
+   - Ergebnisse speichern: `hub.recordResult('<id>', 'online' | 'bot' | 'local', gewonnen, gegnerName, '7:5')`.
+   - Online-Duelle laufen über `Net.host('<id>', code, {onMessage, onStatus})` bzw. `Net.join(...)` aus `js/net.js`.
+   - Design: dunkler Look der Seite (siehe `css/style.css`), ich Blau `#4c7dff`, Gegner Rot `#ff4d5e`.
+2. Datei ins Repository hochladen (die Seite lädt das Modul automatisch nach, `index.html` muss nicht geändert werden).
+3. In Supabase eintragen, **immer mit Status `review`** (= „Zur Freigabe“, nur Admins sehen es):
+   `insert into public.games (id, title, description, status, kind, version, sort) values ('<id>', 'Titel', 'Kurzbeschreibung', 'review', 'builtin', '0.1', 60);`
+   Bei einer neuen Version: `update public.games set version = '0.2', status = 'review', updated_at = now() where id = '<id>';`
+4. Der Admin testet das Spiel auf der Seite und schaltet es im Admin-Panel frei (Beta oder Spielbar).
+
+**Weg B – fertige HTML-Datei hochladen (z. B. aus einem anderen Chat):**
+Admin-Panel → Spiele → „Neues Spiel oder Beta-Version hochladen“. Das Spiel muss eine einzelne HTML-Datei sein und läuft abgeschirmt in einem Rahmen (kein Zugriff auf Anmeldung und Spielstände).
+
+**Status-Werte:** `live` Spielbar · `beta` Beta · `soon` Bald · `hidden` Versteckt · `review` Zur Freigabe.
+
 ## Definition von „fertig“
 - Läuft ohne Fehler in der Browser-Konsole
 - Online-Duell mit zwei echten Verbindungen getestet

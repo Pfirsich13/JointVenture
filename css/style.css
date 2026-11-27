@@ -241,3 +241,14 @@ details.new[open] summary{margin-bottom:14px}
 .pinfo small{color:var(--mute);font-size:13px}
 @media (max-width:860px){.adm-grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.f2{grid-template-columns:minmax(0,1fr)}.player .btn{width:100%}}
+.pill.review{color:#c9b8ff;border-color:rgba(201,184,255,.4);background:rgba(138,107,255,.12)}
+.pending-box{border-color:rgba(138,107,255,.45);background:linear-gradient(180deg,rgba(138,107,255,.10),var(--card))}
+.pend,.pend-note{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}
+.pend:first-of-type{border-top:0}
+.pend b{display:block;font-weight:700}
+.pend small{color:var(--mute);font-size:13px}
+.pend a,.pend-note a{color:#c9b8ff}
+.pend-btns{display:flex;gap:8px}
+.pend-btns .btn{min-height:40px;padding:8px 14px;font-size:14px}
+.card.pending{border-color:rgba(138,107,255,.5)}
+.pend-note{border-top:0;padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line);font-size:14px;color:#d9d0ff}

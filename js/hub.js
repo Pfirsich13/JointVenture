@@ -22,12 +22,29 @@
   const C = () => Content.get();
   const isAdmin = () => !!(window.Auth && Auth.isAdmin());
   const allGames = () => C().games || [];
-  const visibleGames = () => allGames().filter((g) => g.status !== 'hidden' || isAdmin());
+  const adminOnly = (g) => g.status === 'hidden' || g.status === 'review';
+  const visibleGames = () => allGames().filter((g) => !adminOnly(g) || isAdmin());
   const findGame = (id) => allGames().find((g) => g.id === id);
   // Kann man das Spiel starten? (eingebautes Modul oder hochgeladene Datei)
-  const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (g.status === 'hidden' && isAdmin()))
-    && ((g.kind === 'builtin' && window.Games && window.Games[g.id]) || (g.kind === 'upload' && g.file_path));
-  const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'] };
+  // Eingebaute Spiele liegen als js/games/<id>.js im Code und werden bei Bedarf nachgeladen.
+  const BUILTIN_PLAYABLE = (g) => g.kind === 'builtin' && (g.status !== 'soon');
+  const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (adminOnly(g) && isAdmin()))
+    && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path));
+  const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'], review: ['Zur Freigabe', 'review'] };
+  const loadedScripts = {};
+  function loadGameModule(id) {
+    if (window.Games && window.Games[id]) return Promise.resolve(window.Games[id]);
+    if (!/^[a-z0-9-]{2,40}$/.test(id)) return Promise.reject(new Error('ungültige Spiel-ID'));
+    if (!loadedScripts[id]) {
+      loadedScripts[id] = new Promise((res, rej) => {
+        const sc = document.createElement('script'); sc.src = `js/games/${id}.js?v=${encodeURIComponent((findGame(id) || {}).updated_at || '')}`;
+        sc.onload = () => (window.Games && window.Games[id]) ? res(window.Games[id]) : rej(new Error('Spielmodul fehlt'));
+        sc.onerror = () => { delete loadedScripts[id]; rej(new Error('Spiel konnte nicht geladen werden')); };
+        document.head.appendChild(sc);
+      });
+    }
+    return loadedScripts[id];
+  }
 
   /* ---------- Speicher auf diesem Gerät ---------- */
   const KEY = 'duellhalle_v1';
@@ -90,7 +107,7 @@
     $('#games').innerHTML = list.length ? list.map((g) => {
       const [label, cls] = STATUS[g.status] || STATUS.soon;
       return `
-      <button class="game ${playable(g) ? '' : 'soon'} ${g.status === 'hidden' ? 'hidden-game' : ''}" type="button" data-id="${esc(g.id)}">
+      <button class="game ${playable(g) ? '' : 'soon'} ${adminOnly(g) ? 'hidden-game' : ''}" type="button" data-id="${esc(g.id)}">
         <span class="cover" aria-hidden="true">${coverFor(g)}</span>
         <span class="meta">
           <span class="t"><b>${esc(g.title)}</b><span class="pill ${cls}">${label}${g.version && g.status !== 'soon' ? ' ' + esc(g.version) : ''}</span></span>
@@ -303,11 +320,23 @@
     }
     $('#adminView').hidden = true; $('#mainView').hidden = false;
     const g = findGame(id);
-    const mod = g && playable(g) ? (g.kind === 'builtin' ? window.Games[g.id] : { start: (el) => uploadPlayer.start(el, g), stop() { } }) : null;
-    if (current && (!mod || current.id !== id)) { try { current.mod.stop(); } catch (e) { console.error(e); } current = null; $('#game').innerHTML = ''; }
-    if (mod) {
+    const can = g && playable(g);
+    if (current && (!can || current.id !== id)) { try { current.mod.stop(); } catch (e) { console.error(e); } current = null; $('#game').innerHTML = ''; }
+    if (can) {
       $('#hub').hidden = true; $('#game').hidden = false; demo.pause();
-      if (!current) { current = { id, mod }; mod.start($('#game'), hub); hub.intent = null; }
+      if (!current) {
+        const token = current = { id, mod: { stop() { } } };
+        const starting = g.kind === 'builtin' ? loadGameModule(g.id) : Promise.resolve({ start: (el) => uploadPlayer.start(el, g), stop() { } });
+        if (g.kind === 'builtin' && !(window.Games && window.Games[g.id])) $('#game').innerHTML = '<div class="g-panel"><div class="box"><h2>Lädt …</h2><div class="wait"><i></i><i></i><i></i></div></div></div>';
+        starting.then((mod) => {
+          if (current !== token) return;                 // inzwischen woanders hin gewechselt
+          $('#game').innerHTML = ''; token.mod = mod; mod.start($('#game'), hub); hub.intent = null;
+        }).catch((err) => {
+          if (current !== token) return;
+          $('#game').innerHTML = `<div class="g-panel"><div class="box"><h2>Ups</h2><p>${esc(err.message)}</p><button class="btn" type="button" data-b>Zurück</button></div></div>`;
+          $('#game').querySelector('[data-b]').onclick = () => hub.back();
+        });
+      }
     } else {
       $('#game').hidden = true; $('#hub').hidden = false; renderAll(); applyContent(); demo.resume();
     }

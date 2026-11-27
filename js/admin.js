@@ -14,7 +14,7 @@
     ['overview', 'Übersicht'], ['texts', 'Texte'], ['games', 'Spiele'],
     ['projects', 'Projekte'], ['players', 'Spieler'], ['settings', 'Einstellungen']
   ];
-  const STATUS_OPTS = [['live', 'Spielbar'], ['beta', 'Beta'], ['soon', 'Bald'], ['hidden', 'Versteckt']];
+  const STATUS_OPTS = [['live', 'Spielbar'], ['beta', 'Beta'], ['soon', 'Bald'], ['hidden', 'Versteckt'], ['review', 'Zur Freigabe']];
   let root = null, ctx = null, tab = 'overview';
   try { tab = sessionStorage.getItem('jv_admin_tab') || 'overview'; } catch (e) { }
 
@@ -67,7 +67,9 @@
     const titles = Object.fromEntries((Content.get().games || []).map((g) => [g.id, g.title]));
     const top = Object.entries(perGame).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const max = top.length ? top[0][1] : 1;
+    const pending = (Content.get().games || []).filter((g) => g.status === 'review');
     body.innerHTML = `
+      ${pending.length ? `<div class="panel pending-box"><h3>Wartet auf deine Freigabe</h3>${pending.map((g) => `<div class="pend" data-id="${esc(g.id)}"><span><b>${esc(g.title)}</b><small>${g.version ? 'Version ' + esc(g.version) + ' · ' : ''}<a href="#${esc(g.id)}">Jetzt testen</a></small></span><span class="pend-btns"><button class="btn" type="button" data-release="beta">Als Beta</button><button class="btn primary" type="button" data-release="live">Spielbar</button></span></div>`).join('')}</div>` : ''}
       <div class="kpis">
         <div class="kpi"><strong>${pr.data.length}</strong><span>Spieler</span></div>
         <div class="kpi"><strong>${res.length}</strong><span>Matches gesamt</span></div>
@@ -79,6 +81,17 @@
         <div class="panel"><h3>Letzte Matches</h3>${res.length ? `<ol class="hist">${res.slice(0, 10).map((r) => `<li><span><b>${esc(names[r.user_id] || 'Spieler')}: ${esc(titles[r.game] || r.game)} gegen ${esc(r.opponent || 'Gegner')}</b><small>${r.mode === 'online' ? 'Online' : r.mode === 'bot' ? 'Training' : 'Lokal'} · ${ago(r.created_at)}</small></span><span class="sc">${esc(r.score || '')}</span><span class="res ${r.won ? 'w' : 'l'}">${r.won ? 'Sieg' : 'Niederlage'}</span></li>`).join('')}</ol>` : '<p class="empty">Noch keine Matches.</p>'}</div>
       </div>`;
   }
+
+  // Freischalten (Übersicht und Spiele-Karten)
+  async function release(id, status) {
+    const { error } = await db().from('games').update({ status, updated_at: now() }).eq('id', id);
+    if (error) return fail(error);
+    await saved(status === 'live' ? 'Freigeschaltet: jetzt für alle spielbar' : 'Als Beta freigeschaltet'); show();
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-release]'); if (!b || !root || !root.contains(b)) return;
+    release(b.closest('[data-id]').dataset.id, b.dataset.release);
+  });
 
   /* ---------- Texte ---------- */
   const TEXT_FIELDS = [
@@ -210,7 +223,8 @@
   }
   function gameCard(g, i, n) {
     const up = g.kind === 'upload';
-    return `<article class="panel card" data-id="${esc(g.id)}">
+    return `<article class="panel card ${g.status === 'review' ? 'pending' : ''}" data-id="${esc(g.id)}">
+      ${g.status === 'review' ? `<div class="pend-note"><span>Neu, wartet auf Freigabe. <a href="#${esc(g.id)}">Testen</a></span><span class="pend-btns"><button class="btn" type="button" data-release="beta">Als Beta</button><button class="btn primary" type="button" data-release="live">Spielbar</button></span></div>` : ''}
       <div class="card-head"><div><b>${esc(g.title)}</b><small>${up ? 'Hochgeladen' : 'Eingebaut'} · #${esc(g.id)}${g.updated_at ? ' · geändert ' + ago(g.updated_at) : ''}</small></div>
         <div class="ord"><button class="icon" type="button" data-act="up" aria-label="Nach oben" ${i === 0 ? 'disabled' : ''}>↑</button><button class="icon" type="button" data-act="down" aria-label="Nach unten" ${i === n - 1 ? 'disabled' : ''}>↓</button></div></div>
       <form class="form">
