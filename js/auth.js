@@ -60,10 +60,12 @@
     const m = String((e && e.message) || e || '');
     if (/Invalid login/i.test(m)) return 'E-Mail oder Passwort stimmt nicht.';
     if (/already registered|already exists/i.test(m)) return 'Diese E-Mail ist schon registriert. Melde dich an.';
+    if (/should be different|same_password/i.test(m)) return 'Das neue Passwort muss anders sein als das alte.';
     if (/Password should contain|weak password|weak_password/i.test(m)) return 'Das Passwort ist zu schwach: mindestens 8 Zeichen, mit Buchstaben und Zahlen.';
     if (/Password should be at least (\d+)/i.test(m)) return `Das Passwort muss mindestens ${m.match(/at least (\d+)/i)[1]} Zeichen haben.`;
     if (/Password should be/i.test(m)) return 'Das Passwort muss mindestens 8 Zeichen haben, mit Buchstaben und Zahlen.';
     if (/pwned|leaked|compromised/i.test(m)) return 'Dieses Passwort ist aus einem Datenleck bekannt. Bitte wähle ein anderes.';
+    if (/reauthentication|session.*(expired|missing)|not logged in/i.test(m)) return 'Bitte melde dich einmal neu an und versuch es dann nochmal.';
     if (/Email not confirmed/i.test(m)) return 'Bitte bestätige zuerst deine E-Mail (Link im Postfach).';
     if (/valid email|invalid.*email/i.test(m)) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
     if (/signups? (are|is) disabled|signup.*not allowed/i.test(m)) return 'Registrieren ist bei Supabase gerade ausgeschaltet (Authentication → Sign In / Providers).';
@@ -134,6 +136,12 @@
       if (error) { await client.storage.from('avatars').remove([path]); throw new Error(deErr(error)); }
       const old = avatarPath; avatarPath = path; emit();
       if (old) client.storage.from('avatars').remove([old]);    // altes Bild aufräumen
+    },
+    /** Neues Passwort setzen (angemeldet) */
+    async setPassword(password) {
+      need(); if (!user) throw new Error('Bitte melde dich zuerst an.');
+      const { error } = await client.auth.updateUser({ password });
+      if (error) throw new Error(deErr(error));
     },
     async removeAvatar() {
       need(); if (!user || !avatarPath) return;

@@ -381,3 +381,6 @@ body.in-game #mainView,body.in-game #adminView,body.in-game #maint,body.in-game 
 .pic-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .btn.small{min-height:36px;padding:0 12px;font-size:13px;cursor:pointer}
 .pic-msg{margin:0 0 6px!important}
+.prof-pw{margin:10px 0 4px;border-top:1px solid var(--line);padding-top:6px}
+.prof-pw summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+.prof-pw form{margin-top:6px}

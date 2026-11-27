@@ -256,6 +256,11 @@
         <p class="msg" aria-live="polite"></p></form>
       <h4>Deine Statistik</h4><div class="prof-stats"><p class="empty">Lädt …</p></div>
       <p class="prof-rank"></p>
+      <details class="prof-pw"><summary>Passwort ändern</summary>
+        <form novalidate><input class="field" name="p1" type="password" autocomplete="new-password" placeholder="Neues Passwort (mind. 8 Zeichen)">
+        <input class="field" name="p2" type="password" autocomplete="new-password" placeholder="Neues Passwort wiederholen">
+        <p class="hint">Mindestens 8 Zeichen, mit Buchstaben und Zahlen.</p><p class="msg" aria-live="polite"></p>
+        <div class="row"><button class="btn primary" type="submit">Passwort speichern</button></div></form></details>
       <div class="row wrap-row"><button class="btn" type="button" data-mine>Deine Fehlermeldungen</button><button class="btn danger" type="button" data-out>Abmelden</button></div>
       <div class="row"><button class="btn" type="button" data-close>Schließen</button></div>`);
     el.querySelector('.box').classList.add('wide');
@@ -278,6 +283,7 @@
     };
     el.querySelector('[data-out]').onclick = async () => { await Auth.signOut(); el.remove(); };
     el.querySelector('[data-mine]').onclick = () => { el.remove(); openReport('', true); };
+    bindPasswordForm(el.querySelector('.prof-pw form'), () => { el.querySelector('.prof-pw').open = false; });
     const nf = el.querySelector('.prof-name'), nmsg = nf.querySelector('.msg');
     nf.addEventListener('submit', async (e) => {
       e.preventDefault(); nmsg.className = 'msg'; nmsg.textContent = '';
@@ -294,6 +300,25 @@
     // Platz in der Rangliste
     const lb = await Auth.leaderboard(null), i = lb ? lb.findIndex((x) => x.player_id === u.id) : -1;
     el.querySelector('.prof-rank').innerHTML = i >= 0 ? `In der Rangliste: <b>Platz ${i + 1}</b> von ${lb.length} (Online-Duelle)` : 'In der Rangliste bist du, sobald du ein Online-Duell gespielt hast.';
+  }
+
+  // Passwort-Regeln wie beim Registrieren
+  const pwProblem = (pw) => pw.length < 8 || !/[A-Za-zÄÖÜäöüß]/.test(pw) || !/\d/.test(pw) ? 'Das Passwort braucht mindestens 8 Zeichen, mit Buchstaben und Zahlen.' : '';
+  function bindPasswordForm(f, done) {
+    const msg = f.querySelector('.msg'), btn = f.querySelector('[type=submit]');
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); msg.className = 'msg'; msg.textContent = '';
+      const p1 = f.elements.p1.value, p2 = f.elements.p2.value;
+      const problem = pwProblem(p1) || (p1 !== p2 ? 'Die beiden Passwörter sind nicht gleich.' : '');
+      if (problem) { msg.textContent = problem; return; }
+      btn.disabled = true;
+      try {
+        await Auth.setPassword(p1);
+        f.reset(); msg.className = 'msg good'; msg.textContent = 'Neues Passwort gespeichert.';
+        if (done) setTimeout(done, 1200);
+      } catch (err) { msg.textContent = err.message; }
+      btn.disabled = false;
+    });
   }
 
   /* ---------- Rangliste (nur Online-Duelle) ---------- */
