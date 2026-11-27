@@ -1,11 +1,11 @@
 {
-  "name": "Duellhalle",
-  "short_name": "Duellhalle",
+  "name": "JointVenture",
+  "short_name": "JointVenture",
   "start_url": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#5aa9ff",
-  "theme_color": "#5aa9ff",
+  "background_color": "#0d0e12",
+  "theme_color": "#0d0e12",
   "icons": [
     { "src": "icon.png", "sizes": "180x180", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }

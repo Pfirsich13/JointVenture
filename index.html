@@ -3,186 +3,80 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>SouthGames</title>
-<meta name="theme-color" content="#2453ff">
+<title>JointVenture</title>
+<meta name="theme-color" content="#0d0e12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SouthGames">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon.png">
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<!-- Die zwei Brüder als wiederverwendbare Zeichnungen -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <!-- Blauer Bruder: Kopfhörer, entschlossener Blick -->
-    <symbol id="broB" viewBox="0 0 120 150">
-      <ellipse cx="60" cy="146" rx="40" ry="5" fill="rgba(22,19,15,.25)"/>
-      <rect x="40" y="118" width="16" height="26" rx="5" fill="#2a2f45" stroke="#16130f" stroke-width="4"/>
-      <rect x="64" y="118" width="16" height="26" rx="5" fill="#2a2f45" stroke="#16130f" stroke-width="4"/>
-      <rect x="26" y="76" width="68" height="52" rx="16" fill="#2453ff" stroke="#16130f" stroke-width="4"/>
-      <path d="M46 92h28" stroke="#fffaf0" stroke-width="6" stroke-linecap="round"/>
-      <rect x="12" y="84" width="18" height="34" rx="9" fill="#2453ff" stroke="#16130f" stroke-width="4" transform="rotate(14 21 100)"/>
-      <rect x="90" y="84" width="18" height="34" rx="9" fill="#2453ff" stroke="#16130f" stroke-width="4" transform="rotate(-14 99 100)"/>
-      <rect x="24" y="12" width="72" height="68" rx="18" fill="#ffd9b8" stroke="#16130f" stroke-width="4"/>
-      <path d="M24 34c0-18 10-26 36-26s36 8 36 26c-10-6-22-9-36-9s-26 3-36 9z" fill="#3a2418" stroke="#16130f" stroke-width="4" stroke-linejoin="round"/>
-      <path d="M20 44a40 40 0 0 1 80 0" fill="none" stroke="#16130f" stroke-width="5"/>
-      <rect x="12" y="38" width="14" height="24" rx="6" fill="#ff3a2a" stroke="#16130f" stroke-width="4"/>
-      <rect x="94" y="38" width="14" height="24" rx="6" fill="#ff3a2a" stroke="#16130f" stroke-width="4"/>
-      <path d="M40 42l14 5M80 42l-14 5" stroke="#16130f" stroke-width="5" stroke-linecap="round"/>
-      <circle cx="47" cy="54" r="5" fill="#16130f"/><circle cx="73" cy="54" r="5" fill="#16130f"/>
-      <path d="M48 68q12 6 24 0" fill="none" stroke="#16130f" stroke-width="4" stroke-linecap="round"/>
-    </symbol>
-    <!-- Roter Bruder: Stirnband, freches Grinsen -->
-    <symbol id="broR" viewBox="0 0 120 150">
-      <ellipse cx="60" cy="146" rx="40" ry="5" fill="rgba(22,19,15,.25)"/>
-      <rect x="40" y="118" width="16" height="26" rx="5" fill="#2a2f45" stroke="#16130f" stroke-width="4"/>
-      <rect x="64" y="118" width="16" height="26" rx="5" fill="#2a2f45" stroke="#16130f" stroke-width="4"/>
-      <rect x="26" y="76" width="68" height="52" rx="16" fill="#ff3a2a" stroke="#16130f" stroke-width="4"/>
-      <circle cx="60" cy="100" r="9" fill="#fffaf0" stroke="#16130f" stroke-width="3"/>
-      <rect x="12" y="84" width="18" height="34" rx="9" fill="#ff3a2a" stroke="#16130f" stroke-width="4" transform="rotate(14 21 100)"/>
-      <rect x="90" y="72" width="18" height="34" rx="9" fill="#ff3a2a" stroke="#16130f" stroke-width="4" transform="rotate(-150 99 88)"/>
-      <rect x="24" y="12" width="72" height="68" rx="18" fill="#f2c39b" stroke="#16130f" stroke-width="4"/>
-      <path d="M26 30l8-18 8 10 9-14 9 12 9-12 9 14 8-10 8 18z" fill="#16130f"/>
-      <rect x="22" y="28" width="76" height="12" rx="5" fill="#fffaf0" stroke="#16130f" stroke-width="4"/>
-      <path d="M96 30l14-6-4 12z" fill="#fffaf0" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M40 46l14 4M80 44l-14 6" stroke="#16130f" stroke-width="5" stroke-linecap="round"/>
-      <circle cx="47" cy="57" r="5" fill="#16130f"/><circle cx="73" cy="57" r="5" fill="#16130f"/>
-      <path d="M44 66q16 12 32-2" fill="#fffaf0" stroke="#16130f" stroke-width="4" stroke-linejoin="round"/>
-    </symbol>
-    <!-- Kleines Logo: zwei Köpfe -->
-    <symbol id="logoHeads" viewBox="0 0 90 58">
-      <rect x="4" y="6" width="40" height="40" rx="11" fill="#ffd9b8" stroke="#16130f" stroke-width="4"/>
-      <path d="M4 20c0-10 6-15 20-15s20 5 20 15c-6-3-12-5-20-5s-14 2-20 5z" fill="#3a2418" stroke="#16130f" stroke-width="3"/>
-      <rect x="0" y="22" width="8" height="14" rx="3" fill="#2453ff" stroke="#16130f" stroke-width="3"/>
-      <circle cx="18" cy="30" r="3" fill="#16130f"/><circle cx="31" cy="30" r="3" fill="#16130f"/>
-      <rect x="46" y="10" width="40" height="40" rx="11" fill="#f2c39b" stroke="#16130f" stroke-width="4"/>
-      <path d="M47 20l5-10 5 6 5-8 5 7 5-7 5 8 5-6 5 10z" fill="#16130f"/>
-      <rect x="45" y="19" width="42" height="8" rx="3" fill="#ff3a2a" stroke="#16130f" stroke-width="3"/>
-      <circle cx="59" cy="35" r="3" fill="#16130f"/><circle cx="73" cy="35" r="3" fill="#16130f"/>
-      <path d="M58 42q8 6 16 0" fill="none" stroke="#16130f" stroke-width="3" stroke-linecap="round"/>
-    </symbol>
-  </defs>
-</svg>
-
-<!-- ===== Intro beim ersten Öffnen ===== -->
-<div id="intro" class="intro" hidden>
-  <svg class="intro-scene" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <rect width="400" height="300" fill="#9fd4ff"/>
-    <circle class="i-sun" cx="320" cy="60" r="26" fill="#fff1b8" stroke="#16130f" stroke-width="3"/>
-    <g class="i-mnt">
-      <path d="M-20 210L70 90l60 70 50-80 70 90 50-60 120 110z" fill="#6f86b8" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M70 90l-22 30 14-4 10 10 12-14zM180 80l-20 30 12-2 10 10 14-12zM300 110l-16 20 12-2 8 8 10-8z" fill="#fffaf0" stroke="#16130f" stroke-width="2.5" stroke-linejoin="round"/>
-    </g>
-    <g class="i-town">
-      <rect x="30" y="196" width="34" height="26" fill="#ff8a3d" stroke="#16130f" stroke-width="3"/><path d="M26 198l21-18 21 18z" fill="#fffaf0" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-      <rect x="300" y="190" width="40" height="32" fill="#2453ff" stroke="#16130f" stroke-width="3"/><path d="M295 192l25-22 25 22z" fill="#fffaf0" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-      <rect x="350" y="200" width="30" height="22" fill="#7cd1c3" stroke="#16130f" stroke-width="3"/><path d="M346 202l19-16 19 16z" fill="#fffaf0" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-    </g>
-    <path d="M-10 222q100-14 210 0t220 0V310H-10z" fill="#fffaf0" stroke="#16130f" stroke-width="3"/>
-    <use class="i-bro-b" href="#broB" x="70" y="140" width="110" height="138"/>
-    <use class="i-bro-r" href="#broR" x="220" y="140" width="110" height="138"/>
-    <g class="i-vs"><circle cx="200" cy="200" r="24" fill="#ff3a2a" stroke="#16130f" stroke-width="4"/><text x="200" y="208" text-anchor="middle" font-family="Bungee, Impact, sans-serif" font-size="22" fill="#fff" stroke="#16130f" stroke-width="1.5" paint-order="stroke">VS</text></g>
-    <g class="snow" fill="#fff" stroke="#16130f" stroke-width="1"></g>
-  </svg>
-  <h1 class="intro-title">South<span>Games</span></h1>
-  <div class="intro-pop" role="dialog" aria-modal="true" aria-labelledby="popTitle">
-    <p id="popTitle"><b>Hau auf den Buzzer,</b> um SouthGames zu betreten!</p>
-    <button class="buzzer" id="buzzer" type="button" aria-label="Buzzer drücken und SouthGames betreten"><span>DRÜCK<br>MICH</span></button>
-  </div>
-</div>
-
 <div id="hub">
   <header class="top">
     <div class="top-in">
-      <a class="logo" href="#" aria-label="SouthGames Startseite"><svg aria-hidden="true"><use href="#logoHeads"/></svg><b>SouthGames</b></a>
-      <button class="me-chip" id="editName" type="button" aria-label="Namen ändern"><span class="av" id="myAv">?</span><b id="myName">Spieler</b><span class="pen" aria-hidden="true">Ändern</span></button>
+      <a class="brand" href="#" aria-label="Startseite">
+        <svg class="mark" viewBox="0 0 40 28" aria-hidden="true"><circle cx="14" cy="14" r="11" fill="#4c7dff"/><circle cx="26" cy="14" r="11" fill="#ff4d5e" fill-opacity=".9"/><path d="M20 5.2a11 11 0 0 1 0 17.6a11 11 0 0 1 0-17.6z" fill="#c9b8ff"/></svg>
+        <span class="site-name">JointVenture</span>
+      </a>
+      <nav class="links" aria-label="Bereiche">
+        <a href="#spiele">Spiele</a><a href="#stand">Spielstände</a><a href="#arbeit">In Arbeit</a>
+      </nav>
+      <button class="acct" id="acctBtn" type="button"><span class="av" id="acctAv" aria-hidden="true">?</span><span id="acctTxt">Anmelden</span></button>
     </div>
   </header>
 
-  <section class="hero" aria-labelledby="heroTitle">
-    <svg class="scene" viewBox="0 0 1200 500" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-      <rect width="1200" height="500" fill="#9fd4ff"/>
-      <circle cx="1010" cy="110" r="46" fill="#fff1b8" stroke="#16130f" stroke-width="5"/>
-      <g fill="#fff" stroke="#16130f" stroke-width="4">
-        <path class="cloud" style="animation-duration:70s;animation-delay:-20s" d="M60 90a26 26 0 0 1 46-14 22 22 0 0 1 38 10 18 18 0 0 1 4 34H66a20 20 0 0 1-6-30z"/>
-        <path class="cloud" style="animation-duration:95s;animation-delay:-60s" d="M40 160a20 20 0 0 1 36-10 18 18 0 0 1 30 8 14 14 0 0 1 2 26H46a16 16 0 0 1-6-24z"/>
-        <path class="cloud" style="animation-duration:80s;animation-delay:-45s" d="M20 60a22 22 0 0 1 40-12 20 20 0 0 1 34 9 16 16 0 0 1 3 30H26a18 18 0 0 1-6-27z"/>
-      </g>
-      <path d="M-40 360L170 140l130 140 130-190 160 210 130-120 150 120 140-170 250 230z" fill="#6f86b8" stroke="#16130f" stroke-width="5" stroke-linejoin="round"/>
-      <path d="M170 140l-48 52 28-6 20 22 26-30zM430 90l-46 66 26-4 20 20 30-26zM850 140l-40 50 24-4 18 18 26-22z" fill="#fffaf0" stroke="#16130f" stroke-width="4" stroke-linejoin="round"/>
-      <path d="M-40 380L120 280l120 80 140-110 170 140 160-90 180 110 140-100 230 150z" fill="#4f6a99" stroke="#16130f" stroke-width="5" stroke-linejoin="round"/>
-      <g stroke="#16130f" stroke-width="4" stroke-linejoin="round">
-        <path d="M60 400l24-60 24 60zM110 404l20-50 20 50zM1080 400l26-64 26 64zM1130 404l20-50 20 50z" fill="#2f6b4f"/>
-        <rect x="160" y="356" width="80" height="58" fill="#ff8a3d"/><path d="M150 360l50-42 50 42z" fill="#fffaf0"/><rect x="190" y="380" width="20" height="34" fill="#16130f"/>
-        <rect x="260" y="370" width="64" height="44" fill="#7cd1c3"/><path d="M252 374l40-32 40 32z" fill="#fffaf0"/><rect x="276" y="384" width="16" height="14" fill="#9fd4ff"/>
-        <rect x="880" y="350" width="90" height="64" fill="#2453ff"/><path d="M868 354l57-46 57 46z" fill="#fffaf0"/><rect x="900" y="368" width="20" height="18" fill="#9fd4ff"/><rect x="934" y="368" width="20" height="18" fill="#9fd4ff"/>
-        <rect x="986" y="372" width="60" height="42" fill="#ff3a2a"/><path d="M978 376l38-30 38 30z" fill="#fffaf0"/>
-      </g>
-      <path d="M-20 410q300-30 620 0t620 0V520H-20z" fill="#fffaf0" stroke="#16130f" stroke-width="5"/>
-      <use class="mascot-b" href="#broB" x="300" y="246" width="200" height="250"/>
-      <use class="mascot-r" href="#broR" x="700" y="246" width="200" height="250"/>
-      <g><circle cx="600" cy="400" r="44" fill="#ff3a2a" stroke="#16130f" stroke-width="6"/><text x="600" y="416" text-anchor="middle" font-family="Bungee, Impact, sans-serif" font-size="42" fill="#fff" stroke="#16130f" stroke-width="3" paint-order="stroke">VS</text></g>
-      <g class="hero-snow" fill="#fff" stroke="#16130f" stroke-width="1.5"></g>
-    </svg>
-    <div class="hero-txt"><h1 id="heroTitle">Wer ist heute besser?</h1><span class="sub" id="heroSub">Blau gegen Rot. Jedes Duell zählt.</span></div>
-    <div class="tally me"><strong id="fMeW">0</strong><small id="fMeName">Du</small></div>
-    <div class="tally op"><strong id="fOpW">0</strong><small id="fOpName">Gegner</small></div>
-  </section>
-  <div class="hero-cta">
-    <button class="cta" id="quickPlay" type="button">Duell starten</button>
-    <button class="cta ghost" id="quickBot" type="button">Training gegen Bot</button>
-  </div>
-
-  <main class="wrap">
-    <div class="section-head">
-      <h2>Spiele</h2>
-      <nav class="filters" id="filters" aria-label="Spielrichtung"></nav>
-    </div>
-    <div class="mosaic" id="grid"></div>
-
-    <section class="history" aria-labelledby="histTitle">
-      <h2 id="histTitle">Letzte Duelle</h2>
-      <ol class="hist" id="hist"></ol>
+  <main>
+    <section class="hero wrap">
+      <div class="hero-txt">
+        <p class="kicker">Nur für uns zwei</p>
+        <h1 id="tagline">Zockt gegeneinander. Live.</h1>
+        <p class="lead">Spiel wählen, Code teilen, loslegen. Jedes Duell wird gezählt, und wer verliert, fordert Revanche.</p>
+        <div class="actions">
+          <button class="btn primary" id="playMain" type="button">Air-Hockey spielen</button>
+          <button class="btn" id="playBot" type="button">Gegen Bot üben</button>
+        </div>
+        <div class="tally" aria-label="Duell-Bilanz">
+          <div><strong class="me" id="tMe">0</strong><span id="tMeName">Du</span></div>
+          <div class="sep">:</div>
+          <div><strong class="op" id="tOp">0</strong><span id="tOpName">Gegner</span></div>
+        </div>
+      </div>
+      <button class="feature" id="featureCard" type="button" aria-label="Air-Hockey öffnen">
+        <canvas id="demo" aria-hidden="true"></canvas>
+        <span class="live"><i></i>Live-Vorschau</span>
+        <span class="feature-foot"><b>Air-Hockey</b><span>1 gegen 1 online · Bot · 2 auf 1 Handy</span></span>
+      </button>
     </section>
-    <footer class="foot"><span>SouthGames – nur für uns zwei.</span><span>Online-Spiele verbinden eure Handys direkt.</span></footer>
+
+    <section class="wrap block" id="spiele" aria-labelledby="hSpiele">
+      <div class="block-head"><h2 id="hSpiele">Spiele</h2><p>Tippen und loslegen.</p></div>
+      <div class="games" id="games"></div>
+    </section>
+
+    <section class="wrap block" id="stand" aria-labelledby="hStand">
+      <div class="block-head"><h2 id="hStand">Spielstände</h2><p id="standHint">Auf diesem Gerät gespeichert.</p></div>
+      <div class="stand" id="standBox"></div>
+    </section>
+
+    <section class="wrap block" id="arbeit" aria-labelledby="hArbeit">
+      <div class="block-head"><h2 id="hArbeit">In Arbeit</h2><p>Woran wir gerade bauen.</p></div>
+      <div class="projects" id="projects"></div>
+    </section>
+
+    <footer class="wrap foot"><span class="site-name">JointVenture</span><span>Online-Spiele verbinden eure Handys direkt miteinander.</span></footer>
   </main>
 </div>
 
 <div id="game" hidden></div>
-<canvas id="snowfall" aria-hidden="true"></canvas>
 
-<!-- Frosti, der Schneemann (eigenes Maskottchen) -->
-<div class="frosti" id="frosti" hidden>
-  <div class="bubble" id="bubble" role="status" aria-live="polite"><span id="bubbleTxt"></span><button type="button" id="bubbleX" aria-label="Frosti leiser stellen">✕</button></div>
-  <button class="frosti-body" id="frostiBtn" type="button" aria-label="Frosti antippen">
-    <svg viewBox="0 0 120 150" aria-hidden="true">
-      <ellipse cx="60" cy="146" rx="38" ry="4" fill="rgba(22,19,15,.22)"/>
-      <path class="arm" d="M92 92l22-16M108 80l6-10M108 80l9 1" stroke="#6b4423" stroke-width="5" stroke-linecap="round" fill="none"/>
-      <path d="M28 96l-20 8M14 102l-6 8M14 102l-8-4" stroke="#6b4423" stroke-width="5" stroke-linecap="round" fill="none"/>
-      <circle cx="60" cy="114" r="32" fill="#fff" stroke="#16130f" stroke-width="4"/>
-      <circle cx="60" cy="104" r="4" fill="#16130f"/><circle cx="60" cy="118" r="4" fill="#16130f"/><circle cx="60" cy="132" r="4" fill="#16130f"/>
-      <circle cx="60" cy="58" r="26" fill="#fff" stroke="#16130f" stroke-width="4"/>
-      <path d="M32 80q28 12 56 0l2 10q-30 12-60 0z" fill="#ff3a2a" stroke="#16130f" stroke-width="3.5" stroke-linejoin="round"/>
-      <path d="M76 84l8 22-12 2-4-18z" fill="#ff3a2a" stroke="#16130f" stroke-width="3.5" stroke-linejoin="round"/>
-      <path d="M34 42q26-34 52 0z" fill="#2453ff" stroke="#16130f" stroke-width="4" stroke-linejoin="round"/>
-      <rect x="30" y="38" width="60" height="9" rx="4" fill="#fffaf0" stroke="#16130f" stroke-width="3.5"/>
-      <path d="M78 12l10-6 4 10-10 4z" fill="#ff3a2a" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M44 56l10 3M76 54l-10 4" stroke="#16130f" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="50" cy="62" r="4" fill="#16130f"/><circle cx="70" cy="62" r="4" fill="#16130f"/>
-      <g class="lids"><rect x="44" y="56" width="12" height="9" fill="#fff"/><rect x="64" y="56" width="12" height="9" fill="#fff"/></g>
-      <path d="M60 66l20 5-20 3z" fill="#ff8a3d" stroke="#16130f" stroke-width="3" stroke-linejoin="round"/>
-      <path class="mouth" d="M48 76q12 8 24 0" fill="#16130f" stroke="#16130f" stroke-width="3" stroke-linecap="round"/>
-    </svg>
-  </button>
-</div>
-
+<script src="js/config.js"></script>
 <script src="js/net.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/games/airhockey.js"></script>
 <script src="js/hub.js"></script>
 </body>

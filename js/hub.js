@@ -1,131 +1,208 @@
 /* =========================================================================
-   hub.js – SouthGames Startseite
-   Intro, Spiele-Mosaik, Duell-Bilanz, Verlauf, Name, Umschalten ins Spiel.
-   Neues Spiel hinzufügen: unten in GAMES eintragen und ein Modul
-   window.Games.<id> mit start(el, hub) und stop() bereitstellen.
+   hub.js – Startseite: Spiele, Spielstände, Projekte, Anmeldung
+   Neues Spiel: unten in GAMES eintragen und ein Modul window.Games.<id>
+   mit start(el, hub) und stop() bereitstellen.
+   Neues Projekt: unten in PROJECTS eintragen (p = Fortschritt in Prozent).
    ========================================================================= */
 (function () {
-  const SITE_NAME = 'SouthGames';
+  const SITE = window.SITE || { name: 'JointVenture' };
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const FILTERS = [
-    { id: 'alle', name: 'Alle' },
-    { id: 'echtzeit', name: 'Echtzeit-Duell' },
-    { id: 'reaktion', name: 'Reaktion' },
-    { id: 'taktik', name: 'Taktik' },
-    { id: 'solo', name: 'Solo' }
-  ];
-
-  /* Vorschaubilder der Spiele (eigene Zeichnungen) */
-  const ART = {
-    airhockey: '<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><rect width="320" height="200" fill="#2453ff"/><rect x="30" y="26" width="260" height="148" rx="26" fill="#16130f"/><rect x="42" y="38" width="236" height="124" rx="18" fill="#f3f6ff"/><line x1="160" y1="38" x2="160" y2="162" stroke="#16130f" stroke-width="4" stroke-dasharray="10 8"/><circle cx="160" cy="100" r="26" fill="none" stroke="#16130f" stroke-width="4"/><circle cx="84" cy="104" r="20" fill="#2453ff" stroke="#16130f" stroke-width="4"/><circle cx="238" cy="88" r="20" fill="#ff3a2a" stroke="#16130f" stroke-width="4"/><circle cx="132" cy="84" r="10" fill="#16130f"/></svg>',
-    reaction: '<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><rect width="320" height="200" fill="#ff3a2a"/><g fill="none" stroke="#ffd23f" stroke-width="8" stroke-linecap="round"><path d="M70 60l-30-14M64 100H30M70 140l-30 14M250 60l30-14M256 100h34M250 140l30 14"/></g><rect x="118" y="30" width="84" height="140" rx="22" fill="#16130f"/><circle cx="160" cy="66" r="20" fill="#5a1a14" stroke="#fffaf0" stroke-width="3"/><circle cx="160" cy="134" r="22" fill="#3fe07a" stroke="#fffaf0" stroke-width="4"/><path d="M152 118l14-6-6 14 10-2-16 22 4-16-10 2z" fill="#fffaf0"/></svg>',
-    bomber: '<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><rect width="320" height="200" fill="#ff4fa3"/><g fill="#fffaf0" stroke="#16130f" stroke-width="4"><rect x="20" y="20" width="44" height="44"/><rect x="92" y="20" width="44" height="44"/><rect x="236" y="20" width="44" height="44"/><rect x="20" y="136" width="44" height="44"/><rect x="236" y="136" width="44" height="44"/></g><g fill="#c2802d" stroke="#16130f" stroke-width="4"><rect x="164" y="20" width="44" height="44"/><rect x="92" y="136" width="44" height="44"/></g><circle cx="168" cy="118" r="28" fill="#16130f"/><path d="M182 94q12-22 28-14" fill="none" stroke="#16130f" stroke-width="5"/><path d="M214 72l6 8 10-4-4 10 8 6-10 2-2 10-6-8-10 4 4-10-8-6 10-2z" fill="#ffd23f" stroke="#16130f" stroke-width="2"/><rect x="70" y="86" width="30" height="34" rx="8" fill="#2453ff" stroke="#16130f" stroke-width="4"/><rect x="244" y="96" width="30" height="34" rx="8" fill="#ff3a2a" stroke="#16130f" stroke-width="4"/></svg>',
-    arena: '<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><rect width="320" height="200" fill="#16130f"/><g fill="#5a4838"><rect y="40" width="320" height="18"/><rect y="20" width="320" height="16" fill="#463829"/></g><g fill="#ffd23f"><circle cx="30" cy="30" r="5"/><circle cx="80" cy="28" r="5"/><circle cx="130" cy="32" r="5"/><circle cx="190" cy="28" r="5"/><circle cx="250" cy="30" r="5"/><circle cx="300" cy="28" r="5"/></g><ellipse cx="160" cy="150" rx="150" ry="44" fill="#d8b277" stroke="#ffd23f" stroke-width="4"/><rect x="92" y="92" width="44" height="56" rx="6" fill="#2453ff" stroke="#ffd23f" stroke-width="4"/><rect x="184" y="92" width="44" height="56" rx="6" fill="#ff3a2a" stroke="#ffd23f" stroke-width="4"/><path d="M140 104l38-20" stroke="#fffaf0" stroke-width="7" stroke-linecap="round"/><path d="M180 112l-32 22" stroke="#cfd6e0" stroke-width="7" stroke-linecap="round"/></svg>',
-    zombie: '<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><rect width="320" height="200" fill="#26301c"/><circle cx="262" cy="46" r="24" fill="#fffaf0" stroke="#16130f" stroke-width="4"/><path d="M0 160q80-20 160 0t160 0V200H0z" fill="#3a4a24" stroke="#16130f" stroke-width="4"/><g stroke="#16130f" stroke-width="4"><rect x="180" y="86" width="34" height="38" rx="8" fill="#9bc25a"/><rect x="184" y="122" width="26" height="38" rx="6" fill="#5c4b7a"/><path d="M180 104h-24M214 104h22" stroke-linecap="round"/><rect x="246" y="98" width="30" height="34" rx="8" fill="#9bc25a"/><rect x="250" y="130" width="22" height="32" rx="6" fill="#5c4b7a"/></g><circle cx="191" cy="101" r="4" fill="#ff3a2a"/><circle cx="204" cy="101" r="4" fill="#ff3a2a"/><circle cx="256" cy="112" r="3.5" fill="#ff3a2a"/><circle cx="267" cy="112" r="3.5" fill="#ff3a2a"/><rect x="40" y="96" width="34" height="40" rx="8" fill="#2453ff" stroke="#16130f" stroke-width="4"/><rect x="72" y="110" width="30" height="10" rx="3" fill="#16130f"/><path d="M108 115l22-6v12z" fill="#ffd23f" stroke="#16130f" stroke-width="3"/><path d="M134 115h30" stroke="#ffd23f" stroke-width="4" stroke-dasharray="6 6"/></svg>'
+  /* ---------- Spielbilder (eigene Zeichnungen) ---------- */
+  const COVER = {
+    airhockey: `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2550"/><stop offset="1" stop-color="#0d0f18"/></linearGradient><radialGradient id="cAg" cx=".3" cy=".55" r=".35"><stop offset="0" stop-color="#4c7dff" stop-opacity=".55"/><stop offset="1" stop-color="#4c7dff" stop-opacity="0"/></radialGradient><radialGradient id="cAr" cx=".72" cy=".42" r=".3"><stop offset="0" stop-color="#ff4d5e" stop-opacity=".5"/><stop offset="1" stop-color="#ff4d5e" stop-opacity="0"/></radialGradient></defs><rect width="320" height="200" fill="url(#cA)"/><rect x="34" y="34" width="252" height="132" rx="22" fill="#121624" stroke="rgba(255,255,255,.18)" stroke-width="2"/><line x1="160" y1="34" x2="160" y2="166" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-dasharray="6 6"/><circle cx="160" cy="100" r="24" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="2"/><rect width="320" height="200" fill="url(#cAg)"/><rect width="320" height="200" fill="url(#cAr)"/><circle cx="96" cy="110" r="17" fill="#4c7dff"/><circle cx="96" cy="110" r="7" fill="#2f4fc0"/><circle cx="230" cy="84" r="17" fill="#ff4d5e"/><circle cx="230" cy="84" r="7" fill="#c42b3c"/><path d="M128 96l40-10" stroke="rgba(255,255,255,.35)" stroke-width="6" stroke-linecap="round"/><circle cx="178" cy="84" r="8" fill="#f2f4fa"/></svg>`,
+    reaction: `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><radialGradient id="cR" cx=".5" cy=".5" r=".7"><stop offset="0" stop-color="#3a1220"/><stop offset="1" stop-color="#0e0c12"/></radialGradient><radialGradient id="cRg" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#3ddc97" stop-opacity=".8"/><stop offset="1" stop-color="#3ddc97" stop-opacity="0"/></radialGradient></defs><rect width="320" height="200" fill="url(#cR)"/><g fill="none" stroke="rgba(61,220,151,.25)" stroke-width="2"><circle cx="160" cy="100" r="56"/><circle cx="160" cy="100" r="76"/><circle cx="160" cy="100" r="96"/></g><circle cx="160" cy="100" r="60" fill="url(#cRg)"/><circle cx="160" cy="100" r="34" fill="#3ddc97"/><path d="M154 80l18-4-10 18 12-2-22 30 6-22-12 2z" fill="#0e0c12"/></svg>`,
+    bomber: `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b1640"/><stop offset="1" stop-color="#120d18"/></linearGradient><radialGradient id="cBg" cx=".62" cy=".42" r=".25"><stop offset="0" stop-color="#ffb347" stop-opacity=".9"/><stop offset="1" stop-color="#ffb347" stop-opacity="0"/></radialGradient></defs><rect width="320" height="200" fill="url(#cB)"/><g fill="rgba(255,255,255,.07)" stroke="rgba(255,255,255,.12)"><rect x="24" y="24" width="40" height="40" rx="6"/><rect x="88" y="24" width="40" height="40" rx="6"/><rect x="216" y="24" width="40" height="40" rx="6"/><rect x="24" y="136" width="40" height="40" rx="6"/><rect x="152" y="136" width="40" height="40" rx="6"/><rect x="256" y="136" width="40" height="40" rx="6"/></g><rect width="320" height="200" fill="url(#cBg)"/><circle cx="170" cy="112" r="26" fill="#0b0a10" stroke="rgba(255,255,255,.2)" stroke-width="2"/><path d="M186 92q10-18 24-12" fill="none" stroke="#c9a27a" stroke-width="4"/><circle cx="212" cy="80" r="6" fill="#ffd27a"/><rect x="74" y="96" width="28" height="30" rx="8" fill="#4c7dff"/><rect x="248" y="88" width="28" height="30" rx="8" fill="#ff4d5e"/></svg>`,
+    arena: `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cX" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a140d"/><stop offset="1" stop-color="#0d0b09"/></linearGradient><radialGradient id="cXg" cx=".5" cy=".78" r=".55"><stop offset="0" stop-color="#d8a85a" stop-opacity=".55"/><stop offset="1" stop-color="#d8a85a" stop-opacity="0"/></radialGradient></defs><rect width="320" height="200" fill="url(#cX)"/><rect width="320" height="200" fill="url(#cXg)"/><ellipse cx="160" cy="160" rx="140" ry="30" fill="#2a2016" stroke="rgba(216,168,90,.5)" stroke-width="2"/><rect x="102" y="96" width="38" height="52" rx="6" fill="#4c7dff"/><rect x="180" y="96" width="38" height="52" rx="6" fill="#ff4d5e"/><path d="M144 108l40-22" stroke="#e8ecf5" stroke-width="5" stroke-linecap="round"/><path d="M176 116l-34 20" stroke="#aeb6c8" stroke-width="5" stroke-linecap="round"/><circle cx="160" cy="104" r="4" fill="#fff"/></svg>`,
+    zombie: `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14201a"/><stop offset="1" stop-color="#0a0d0b"/></linearGradient><radialGradient id="cZm" cx=".82" cy=".22" r=".25"><stop offset="0" stop-color="#e9f3df" stop-opacity=".5"/><stop offset="1" stop-color="#e9f3df" stop-opacity="0"/></radialGradient></defs><rect width="320" height="200" fill="url(#cZ)"/><rect width="320" height="200" fill="url(#cZm)"/><circle cx="262" cy="44" r="16" fill="#e9f3df"/><path d="M0 168q80-16 160 0t160 0V200H0z" fill="#101712"/><g fill="#6f8f5a"><rect x="184" y="94" width="26" height="34" rx="7"/><rect x="236" y="104" width="24" height="30" rx="7"/></g><g fill="#3b3352"><rect x="187" y="126" width="20" height="38" rx="5"/><rect x="239" y="132" width="18" height="34" rx="5"/></g><path d="M184 108h-20M210 108h18M236 116h-16" stroke="#6f8f5a" stroke-width="6" stroke-linecap="round"/><g fill="#ff4d5e"><circle cx="193" cy="106" r="2.5"/><circle cx="202" cy="106" r="2.5"/><circle cx="244" cy="115" r="2.5"/><circle cx="252" cy="115" r="2.5"/></g><rect x="48" y="104" width="26" height="34" rx="7" fill="#4c7dff"/><rect x="72" y="116" width="26" height="7" rx="3" fill="#cfd5e3"/><path d="M104 119l18-6v12z" fill="#ffd27a"/><path d="M126 119h40" stroke="#ffd27a" stroke-width="3" stroke-dasharray="5 6" opacity=".8"/></svg>`
   };
 
   const GAMES = [
-    { id: 'airhockey', title: 'Air-Hockey', live: true, c: '#2453ff', cats: ['echtzeit', 'solo'], info: '1 gegen 1 · Bot · 2 auf 1 Handy' },
-    { id: 'reaction', title: 'Reaktionsduell', c: '#ff3a2a', cats: ['reaktion', 'echtzeit'], info: '1 gegen 1' },
-    { id: 'bomber', title: 'Mini-Bomber', c: '#ff4fa3', cats: ['echtzeit', 'taktik'], info: '1 gegen 1' },
-    { id: 'arena', title: 'Arena-PvP', c: '#16130f', cats: ['echtzeit'], info: '3D · vom Bruder' },
-    { id: 'zombie', title: 'Zombie-Shooter', c: '#26301c', cats: ['solo'], info: 'PvE · Wellen' }
+    { id: 'airhockey', title: 'Air-Hockey', live: true, desc: 'Schnell, laut, gemein. Wer zuerst 7 Tore hat, gewinnt.' },
+    { id: 'reaction', title: 'Reaktionsduell', desc: 'Warte aufs Signal und tippe schneller als der andere.' },
+    { id: 'bomber', title: 'Mini-Bomber', desc: 'Bomben legen, Wände sprengen, den anderen erwischen.' },
+    { id: 'arena', title: 'Arena-PvP', desc: 'Das 3D-Kampfspiel aus dem Projekt deines Bruders.' },
+    { id: 'zombie', title: 'Zombie-Shooter', desc: 'Welle um Welle gegen Horden, allein oder zusammen.' }
+  ];
+
+  /* Projekte, an denen gerade gebaut wird (p = Fortschritt in %) */
+  const PROJECTS = [
+    { t: 'Anmeldung & Spielstände', who: 'Ron', p: 90, s: 'Supabase verbunden, Tabellen stehen', n: 'Auf beiden Handys registrieren und testen' },
+    { t: 'Arena-PvP', who: 'Bruder', p: 25, s: 'Prototyp mit Würfeln läuft', n: 'Thema wählen: Gladiatoren, Mechs oder Magier' },
+    { t: 'Reaktionsduell', who: 'Ron', p: 5, s: 'Geplant', n: 'Als nächstes Spiel bauen' },
+    { t: 'Mini-Bomber', who: 'offen', p: 0, s: 'Idee', n: 'Regeln und Karte festlegen' },
+    { t: 'Zombie-Shooter (PvE)', who: 'offen', p: 0, s: 'Idee', n: 'Für viele Spieler später eigener Server' }
   ];
 
   /* ---------- Speicher auf diesem Gerät ---------- */
-  const KEY = 'duellhalle_v1';                 // Name bleibt, damit alte Siege erhalten bleiben
+  const KEY = 'duellhalle_v1';
   let store = { name: '', opp: '', stats: {}, history: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) store = Object.assign(store, JSON.parse(raw)); } catch (e) { }
   if (!Array.isArray(store.history)) store.history = [];
   function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { } }
 
+  let cloud = null;   // Ergebnisse aus Supabase, wenn angemeldet
+
   const hub = {
-    intent: null,                                 // z.B. 'bot': Spiel startet direkt im Bot-Modus
-    getName: () => store.name || 'Spieler',
+    intent: null,
+    getName: () => (window.Auth && Auth.user() && Auth.name()) || store.name || 'Spieler',
     recordResult(game, kind, won, oppName, scoreText) {
       const g = store.stats[game] || (store.stats[game] = {});
       const k = g[kind] || (g[kind] = { w: 0, l: 0 });
       won ? k.w++ : k.l++;
       if (kind === 'online' && oppName) store.opp = String(oppName).slice(0, 20);
-      store.history.unshift({ g: game, k: kind, w: !!won, o: String(oppName || (kind === 'bot' ? 'Bot' : '')).slice(0, 20), s: String(scoreText || '').slice(0, 9), t: Date.now() });
-      store.history = store.history.slice(0, 20);
-      save();
+      const entry = { g: game, k: kind, w: !!won, o: String(oppName || '').slice(0, 20), s: String(scoreText || '').slice(0, 9), t: Date.now() };
+      store.history.unshift(entry); store.history = store.history.slice(0, 30); save();
+      if (window.Auth && Auth.user()) {
+        Auth.saveResult({ game, mode: kind, won, score: scoreText, opponent: oppName }).then((ok) => { if (ok) refreshCloud(); });
+      }
     },
     statsFor(game) { return store.stats[game] || {}; },
     back() { if (location.hash) history.replaceState(null, '', location.pathname + location.search); route(); }
   };
   window.Hub = hub;
 
-  /* ---------- Mosaik ---------- */
-  let filter = 'alle';
-  function renderFilters() {
-    $('#filters').innerHTML = FILTERS.map((f) => `<button class="chip" type="button" data-f="${f.id}" aria-pressed="${f.id === filter}">${f.name}</button>`).join('');
+  /* ---------- Darstellung ---------- */
+  function applyName() {
+    document.title = SITE.name;
+    document.querySelectorAll('.site-name').forEach((n) => { n.textContent = SITE.name; });
+    if (SITE.tagline) $('#tagline').textContent = SITE.tagline;
   }
-  function renderTiles() {
-    const list = GAMES.filter((g) => filter === 'alle' || g.cats.includes(filter));
-    $('#grid').innerHTML = list.map((g, i) => {
-      const big = g.live && i === 0;
-      return `<button class="tile ${big ? 'big' : ''} ${g.live ? '' : 'soon'}" type="button" data-id="${g.id}" style="--c:${g.c};--d:${(i * 0.7).toFixed(1)}s" aria-label="${esc(g.title)}${g.live ? '' : ' (in Arbeit)'}">
-        <span class="art" aria-hidden="true">${ART[g.id] || ''}</span>
-        ${big ? '<canvas class="demo" aria-hidden="true"></canvas><span class="live"><i></i>Live-Vorschau</span><span class="play">Spielen</span>' : `<span class="badge ${g.live ? 'ok' : ''}">${g.live ? 'Spielbar' : 'Bald'}</span>`}
-        <span class="name"><b>${esc(g.title)}</b><span>${esc(g.info)}</span></span>
-      </button>`;
-    }).join('');
-    demo.attach($('#grid canvas.demo'));
+  function renderGames() {
+    $('#games').innerHTML = GAMES.map((g) => `
+      <button class="game ${g.live ? '' : 'soon'}" type="button" data-id="${g.id}">
+        <span class="cover" aria-hidden="true">${COVER[g.id] || ''}</span>
+        <span class="meta">
+          <span class="t"><b>${esc(g.title)}</b><span class="pill ${g.live ? 'ok' : ''}">${g.live ? 'Spielbar' : 'Bald'}</span></span>
+          <span class="d">${esc(g.desc)}</span>
+        </span>
+      </button>`).join('');
   }
-
-  /* ---------- Bilanz und Verlauf ---------- */
-  function totals() {
-    let w = 0, l = 0;
-    for (const g of Object.values(store.stats)) if (g.online) { w += g.online.w; l += g.online.l; }
-    return { w, l };
+  function renderProjects() {
+    $('#projects').innerHTML = PROJECTS.map((p) => `
+      <article class="proj">
+        <div class="t"><b>${esc(p.t)}</b><span class="who">${esc(p.who)}</span></div>
+        <div class="bar" role="progressbar" aria-valuenow="${p.p}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.max(2, p.p)}%"></i></div>
+        <div class="row"><span>${esc(p.s)}</span><span>${p.p} %</span></div>
+        <div class="next">Nächster Schritt: ${esc(p.n)}</div>
+      </article>`).join('');
   }
-  function initial(n) { return (String(n || '?').trim()[0] || '?').toUpperCase(); }
-  function renderScore() {
-    const { w, l } = totals();
-    $('#myName').textContent = hub.getName();
-    $('#myAv').textContent = initial(hub.getName());
-    $('#fMeName').textContent = hub.getName();
-    $('#fOpName').textContent = store.opp || 'Gegner';
-    $('#fMeW').textContent = w; $('#fOpW').textContent = l;
-    const sub = $('#heroSub');
-    if (!w && !l) sub.textContent = 'Blau gegen Rot. Jedes Duell zählt.';
-    else if (w > l) sub.textContent = `${hub.getName()} führt mit ${w - l} ${w - l === 1 ? 'Sieg' : 'Siegen'} Vorsprung.`;
-    else if (l > w) sub.textContent = `${store.opp || 'Der Gegner'} führt. Zeit für Rache!`;
-    else sub.textContent = 'Gleichstand! Das nächste Duell entscheidet.';
-  }
-  const GAME_ICON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#fffaf0" stroke="#16130f" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="#16130f"/></svg>';
+  const gameTitle = (id) => (GAMES.find((g) => g.id === id) || { title: id }).title;
   function ago(t) {
     const m = Math.round((Date.now() - t) / 60000);
     if (m < 1) return 'gerade eben'; if (m < 60) return `vor ${m} Min.`;
     const h = Math.round(m / 60); if (h < 24) return `vor ${h} Std.`;
     const d = Math.round(h / 24); return d === 1 ? 'gestern' : `vor ${d} Tagen`;
   }
-  function renderHistory() {
-    const list = store.history.slice(0, 8);
-    if (!list.length) { $('#hist').innerHTML = '<li class="empty">Noch keine Duelle. Fordere deinen Bruder heraus!</li>'; return; }
-    $('#hist').innerHTML = list.map((h) => {
-      const g = GAMES.find((x) => x.id === h.g);
-      return `<li><span class="gi" aria-hidden="true">${GAME_ICON}</span>
-        <span class="t"><b>${esc(g ? g.title : h.g)} gegen ${esc(h.o || 'Gegner')}</b><small>${h.k === 'online' ? 'Online' : 'Training'} · ${ago(h.t)}</small></span>
-        <span class="sc">${esc(h.s)}</span><span class="res ${h.w ? 'w' : 'l'}">${h.w ? 'Sieg' : 'Niederlage'}</span></li>`;
-    }).join('');
+  function results() {
+    if (cloud) return cloud.map((r) => ({ g: r.game, k: r.mode, w: r.won, o: r.opponent, s: r.score, t: Date.parse(r.created_at) }));
+    return store.history;
   }
-  function renderAll() { renderScore(); renderHistory(); }
+  function renderStand() {
+    const list = results();
+    const online = list.filter((r) => r.k === 'online');
+    const w = online.filter((r) => r.w).length, l = online.length - w;
+    const signedIn = window.Auth && Auth.user();
+    const canLogin = window.Auth && Auth.ready;
+    $('#tMe').textContent = w; $('#tOp').textContent = l;
+    $('#tMeName').textContent = hub.getName(); $('#tOpName').textContent = store.opp || 'Gegner';
+    $('#standHint').textContent = signedIn ? `Gespeichert in deinem Konto, ${hub.getName()}.` : 'Auf diesem Gerät gespeichert.';
+    const rate = w + l ? Math.round((w / (w + l)) * 100) : 0;
+    const loginBox = signedIn ? '' : `<div class="login-cta"><span>${canLogin ? 'Melde dich an, damit deine Spielstände auf jedem Gerät da sind.' : 'Anmeldung kommt in Kürze. Bis dahin zählt dieses Gerät mit.'}</span>${canLogin ? '<button class="btn primary" type="button" data-login>Anmelden</button>' : ''}</div>`;
+    const recent = list.slice(0, 8);
+    $('#standBox').innerHTML = `
+      <div class="panel">
+        <h3>Online-Bilanz</h3>
+        <div class="big-score"><strong class="w">${w}</strong><span>Siege</span><strong class="l">${l}</strong><span>Niederlagen</span></div>
+        <div class="rate" aria-label="Siegquote ${rate} Prozent"><i style="width:${w + l ? rate : 50}%"></i></div>
+        <p class="hint">${w + l ? `Siegquote ${rate} %` : 'Noch kein Online-Duell gespielt.'}</p>
+        ${loginBox}
+      </div>
+      <div class="panel">
+        <h3>Letzte Spiele</h3>
+        ${recent.length ? `<ol class="hist">${recent.map((r) => `<li><span><b>${esc(gameTitle(r.g))} gegen ${esc(r.o || (r.k === 'bot' ? 'Bot' : 'Gegner'))}</b><small>${r.k === 'online' ? 'Online' : r.k === 'bot' ? 'Training' : 'Lokal'} · ${ago(r.t)}</small></span><span class="sc">${esc(r.s || '')}</span><span class="res ${r.w ? 'w' : 'l'}">${r.w ? 'Sieg' : 'Niederlage'}</span></li>`).join('')}</ol>` : '<p class="empty">Noch keine Spiele. Fordere deinen Bruder heraus!</p>'}
+      </div>`;
+  }
+  function renderAccount() {
+    const u = window.Auth && Auth.user();
+    $('#acctTxt').textContent = u ? hub.getName() : (window.Auth && Auth.ready ? 'Anmelden' : hub.getName());
+    $('#acctAv').textContent = (hub.getName()[0] || '?').toUpperCase();
+  }
+  function renderAll() { renderAccount(); renderStand(); }
+  async function refreshCloud() {
+    cloud = window.Auth && Auth.user() ? await Auth.loadResults() : null;
+    renderAll();
+  }
+
+  /* ---------- Fenster: Anmelden / Registrieren / Name ---------- */
+  function sheet(html) {
+    const el = document.createElement('div'); el.className = 'sheet'; el.innerHTML = `<div class="box">${html}</div>`;
+    el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) el.remove(); });
+    document.body.appendChild(el); return el;
+  }
+  function openAccount() {
+    if (!window.Auth || !Auth.ready) return askName(false);
+    if (Auth.user()) {
+      const el = sheet(`<h3>${esc(hub.getName())}</h3><p>Angemeldet als ${esc(Auth.user().email || '')}</p>
+        <div class="row"><button class="btn" type="button" data-close>Schließen</button><button class="btn danger" type="button" data-out>Abmelden</button></div>`);
+      el.querySelector('[data-out]').onclick = async () => { await Auth.signOut(); el.remove(); };
+      return;
+    }
+    let mode = 'in';
+    const el = sheet(`<h3>Willkommen</h3><p>Melde dich an, damit deine Spielstände gespeichert werden.</p>
+      <div class="tabs" role="tablist"><button type="button" role="tab" data-t="in" aria-selected="true">Anmelden</button><button type="button" role="tab" data-t="up" aria-selected="false">Registrieren</button></div>
+      <form novalidate>
+        <input class="field" name="name" placeholder="Dein Name" maxlength="16" autocomplete="nickname" hidden>
+        <input class="field" name="email" type="email" placeholder="E-Mail" autocomplete="email" required>
+        <input class="field" name="pw" type="password" placeholder="Passwort (mind. 6 Zeichen)" autocomplete="current-password" required>
+        <p class="msg" aria-live="polite"></p>
+        <div class="row"><button class="btn" type="button" data-close>Abbrechen</button><button class="btn primary" type="submit">Anmelden</button></div>
+      </form>`);
+    const f = el.querySelector('form'), msg = el.querySelector('.msg'), submit = f.querySelector('[type=submit]');
+    el.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => {
+      mode = b.dataset.t;
+      el.querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      f.elements.name.hidden = mode !== 'up'; submit.textContent = mode === 'up' ? 'Konto erstellen' : 'Anmelden';
+      f.elements.pw.autocomplete = mode === 'up' ? 'new-password' : 'current-password'; msg.textContent = '';
+    }; });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); msg.className = 'msg'; msg.textContent = '';
+      const name = f.elements.name.value.trim(), email = f.elements.email.value.trim(), pw = f.elements.pw.value;
+      if (mode === 'up' && !name) { msg.textContent = 'Bitte gib einen Namen ein.'; return; }
+      if (!email || !pw) { msg.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+      submit.disabled = true;
+      try {
+        if (mode === 'up') {
+          const r = await Auth.signUp(name, email, pw);
+          if (r.needsConfirm) { msg.className = 'msg good'; msg.textContent = 'Fast geschafft: Bestätige den Link in deiner E-Mail und melde dich dann an.'; submit.disabled = false; return; }
+        } else await Auth.signIn(email, pw);
+        el.remove();
+      } catch (err) { msg.textContent = err.message; submit.disabled = false; }
+    });
+    setTimeout(() => f.elements.email.focus(), 50);
+  }
+  function askName(first) {
+    const el = sheet(`<h3>${first ? 'Wie heißt du?' : 'Dein Name'}</h3><p>So sieht dich dein Gegner im Spiel.</p>
+      <form><input class="field" name="n" maxlength="16" autocomplete="nickname" placeholder="Dein Name">
+      <div class="row">${first ? '' : '<button class="btn" type="button" data-close>Abbrechen</button>'}<button class="btn primary" type="submit">Speichern</button></div></form>`);
+    const f = el.querySelector('form'); f.elements.n.value = store.name;
+    f.addEventListener('submit', (e) => { e.preventDefault(); const v = f.elements.n.value.trim().slice(0, 16); if (!v) return; store.name = v; save(); el.remove(); renderAll(); });
+    setTimeout(() => f.elements.n.focus(), 50);
+  }
 
   /* ---------- Live-Vorschau: zwei Bots spielen Air-Hockey ---------- */
   const demo = (() => {
-    let cv = null, cx = null, raf = 0, on = false, io = null;
+    const cv = $('#demo'); if (!cv) return { pause() { }, resume() { } };
+    const cx = cv.getContext('2d');
     const T = { w: 1.7, h: 1 }, pr = 0.045, Rp = 0.08;
-    let puck = { x: 0.85, y: 0.5, vx: 1.1, vy: 0.6 }, A = { x: 0.2, y: 0.5 }, B = { x: 1.5, y: 0.5 }, last = 0;
+    let puck = { x: 0.85, y: 0.5, vx: 1.1, vy: 0.6 }, A = { x: 0.2, y: 0.5 }, B = { x: 1.5, y: 0.5 }, trail = [], raf = 0, on = false, last = 0;
     function step(dt) {
       puck.x += puck.vx * dt; puck.y += puck.vy * dt;
       if (puck.y < pr || puck.y > T.h - pr) { puck.vy *= -1; puck.y = Math.max(pr, Math.min(T.h - pr, puck.y)); }
       if (puck.x < pr || puck.x > T.w - pr) {
-        if (Math.abs(puck.y - 0.5) < 0.17) { puck = { x: T.w / 2, y: 0.5, vx: (Math.random() < 0.5 ? -1 : 1) * 0.9, vy: (Math.random() - 0.5) * 1.2 }; return; }
+        if (Math.abs(puck.y - 0.5) < 0.17) { puck = { x: T.w / 2, y: 0.5, vx: (Math.random() < 0.5 ? -1 : 1) * 0.9, vy: (Math.random() - 0.5) * 1.2 }; trail = []; return; }
         puck.vx *= -1; puck.x = Math.max(pr, Math.min(T.w - pr, puck.x));
       }
       for (const [p, home, dir] of [[A, 0.18, 1], [B, T.w - 0.18, -1]]) {
@@ -135,199 +212,38 @@
         const dx = puck.x - p.x, dy = puck.y - p.y, d = Math.hypot(dx, dy);
         if (d < pr + Rp && d > 0) { const nx = dx / d, ny = dy / d; puck.x = p.x + nx * (pr + Rp); puck.y = p.y + ny * (pr + Rp); const sp = 1.6 + Math.random() * 0.8; puck.vx = nx * sp + dir * 0.4; puck.vy = ny * sp; }
       }
-      puck.vx *= 0.999; puck.vy *= 0.999;
-    }
-    function draw() {
-      const W = cv.clientWidth, H = cv.clientHeight, d = Math.min(devicePixelRatio || 1, 2);
-      if (cv.width !== Math.round(W * d)) { cv.width = Math.round(W * d); cv.height = Math.round(H * d); }
-      cx.setTransform(d, 0, 0, d, 0, 0); cx.fillStyle = '#2453ff'; cx.fillRect(0, 0, W, H);
-      const s = Math.min((W - 30) / T.w, (H - 30) / T.h), ox = (W - T.w * s) / 2, oy = (H - T.h * s) / 2 - H * 0.04;
-      cx.fillStyle = '#16130f'; rr(ox - 10, oy - 10, T.w * s + 20, T.h * s + 20, 24); cx.fill();
-      cx.fillStyle = '#f3f6ff'; rr(ox, oy, T.w * s, T.h * s, 16); cx.fill();
-      cx.strokeStyle = '#16130f'; cx.lineWidth = 3; cx.setLineDash([9, 7]); cx.beginPath(); cx.moveTo(ox + T.w * s / 2, oy); cx.lineTo(ox + T.w * s / 2, oy + T.h * s); cx.stroke(); cx.setLineDash([]);
-      cx.beginPath(); cx.arc(ox + T.w * s / 2, oy + T.h * s / 2, 0.15 * s, 0, 7); cx.stroke();
-      cx.fillStyle = '#2a2520'; cx.fillRect(ox - 10, oy + (0.5 - 0.17) * s, 8, 0.34 * s); cx.fillRect(ox + T.w * s + 2, oy + (0.5 - 0.17) * s, 8, 0.34 * s);
-      const pad = (p, c) => { cx.fillStyle = c; cx.strokeStyle = '#16130f'; cx.lineWidth = 3; cx.beginPath(); cx.arc(ox + p.x * s, oy + p.y * s, Rp * s, 0, 7); cx.fill(); cx.stroke(); cx.beginPath(); cx.arc(ox + p.x * s, oy + p.y * s, Rp * s * 0.45, 0, 7); cx.stroke(); };
-      pad(A, '#2453ff'); pad(B, '#ff3a2a');
-      cx.fillStyle = '#16130f'; cx.beginPath(); cx.arc(ox + puck.x * s, oy + puck.y * s, pr * s, 0, 7); cx.fill();
-      cx.strokeStyle = '#fffaf0'; cx.lineWidth = 2.5; cx.beginPath(); cx.arc(ox + puck.x * s, oy + puck.y * s, pr * s * 0.55, 0, 7); cx.stroke();
+      trail.push({ x: puck.x, y: puck.y }); if (trail.length > 12) trail.shift();
     }
     function rr(x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r); cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath(); }
+    function draw() {
+      const W = cv.clientWidth, H = cv.clientHeight, d = Math.min(devicePixelRatio || 1, 2);
+      if (!W || !H) return;
+      if (cv.width !== Math.round(W * d) || cv.height !== Math.round(H * d)) { cv.width = Math.round(W * d); cv.height = Math.round(H * d); }
+      cx.setTransform(d, 0, 0, d, 0, 0);
+      const bg = cx.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#141a33'); bg.addColorStop(1, '#0c0d12'); cx.fillStyle = bg; cx.fillRect(0, 0, W, H);
+      const top = 52, bot = W < 520 ? 58 : 66, s = Math.min((W - 40) / T.w, (H - top - bot) / T.h), ox = (W - T.w * s) / 2, oy = top + (H - top - bot - T.h * s) / 2;
+      cx.fillStyle = '#121624'; cx.strokeStyle = 'rgba(255,255,255,.16)'; cx.lineWidth = 2; rr(ox, oy, T.w * s, T.h * s, 18); cx.fill(); cx.stroke();
+      cx.strokeStyle = 'rgba(255,255,255,.2)'; cx.setLineDash([7, 7]); cx.beginPath(); cx.moveTo(ox + T.w * s / 2, oy + 6); cx.lineTo(ox + T.w * s / 2, oy + T.h * s - 6); cx.stroke(); cx.setLineDash([]);
+      cx.beginPath(); cx.arc(ox + T.w * s / 2, oy + T.h * s / 2, 0.14 * s, 0, 7); cx.stroke();
+      cx.fillStyle = 'rgba(76,125,255,.6)'; cx.fillRect(ox - 3, oy + (0.5 - 0.17) * s, 4, 0.34 * s);
+      cx.fillStyle = 'rgba(255,77,94,.6)'; cx.fillRect(ox + T.w * s - 1, oy + (0.5 - 0.17) * s, 4, 0.34 * s);
+      for (let i = 0; i < trail.length; i++) { cx.fillStyle = `rgba(242,244,250,${(i / trail.length) * 0.18})`; cx.beginPath(); cx.arc(ox + trail[i].x * s, oy + trail[i].y * s, pr * s * (0.4 + i / trail.length * 0.6), 0, 7); cx.fill(); }
+      const pad = (p, c, c2) => {
+        cx.save(); cx.shadowColor = c; cx.shadowBlur = 18;
+        cx.fillStyle = c; cx.beginPath(); cx.arc(ox + p.x * s, oy + p.y * s, Rp * s, 0, 7); cx.fill(); cx.restore();
+        cx.fillStyle = c2; cx.beginPath(); cx.arc(ox + p.x * s, oy + p.y * s, Rp * s * 0.42, 0, 7); cx.fill();
+      };
+      pad(A, '#4c7dff', '#2f4fc0'); pad(B, '#ff4d5e', '#c42b3c');
+      cx.save(); cx.shadowColor = '#fff'; cx.shadowBlur = 12; cx.fillStyle = '#f2f4fa'; cx.beginPath(); cx.arc(ox + puck.x * s, oy + puck.y * s, pr * s, 0, 7); cx.fill(); cx.restore();
+    }
     function loop(t) { if (!on) return; raf = requestAnimationFrame(loop); const dt = Math.min(0.033, (t - last) / 1000 || 0.016); last = t; step(dt); draw(); }
-    function setOn(v) { if (v === on) return; on = v; cancelAnimationFrame(raf); if (on) { last = performance.now(); raf = requestAnimationFrame(loop); } }
-    return {
-      attach(c) {
-        setOn(false); if (io) io.disconnect(); cv = c; if (!cv) return; cx = cv.getContext('2d');
-        if (reduced) { requestAnimationFrame(draw); return; }
-        io = new IntersectionObserver((e) => setOn(e[0].isIntersecting && !$('#hub').hidden)); io.observe(cv);
-      },
-      pause() { setOn(false); },
-      resume() { if (cv && !reduced) setOn(true); }
-    };
+    function pause() { on = false; cancelAnimationFrame(raf); }
+    function resume() { if (reduced) { draw(); return; } if (on) return; on = true; last = performance.now(); raf = requestAnimationFrame(loop); }
+    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting && !$('#hub').hidden) resume(); else pause(); });
+    io.observe(cv);
+    addEventListener('resize', () => { if (!on) draw(); });
+    return { pause, resume };
   })();
-
-  /* ---------- Schneefall ---------- */
-  function snow(g, n, w, h, r0) {
-    if (!g || reduced) return;
-    let s = '';
-    for (let i = 0; i < n; i++) {
-      const x = Math.random() * w, r = r0 * (0.6 + Math.random() * 0.8), dur = 6 + Math.random() * 8, del = -Math.random() * dur;
-      s += `<circle class="flake" cx="${x.toFixed(1)}" cy="${(-r).toFixed(1)}" r="${r.toFixed(1)}" style="animation-duration:${dur.toFixed(1)}s;animation-delay:${del.toFixed(1)}s"/>`;
-    }
-    g.innerHTML = s;
-  }
-
-  /* ---------- Titelbild an schmale Handys anpassen ---------- */
-  function fitScenes() {
-    const narrow = innerWidth < 600 && innerHeight > innerWidth;
-    const hero = document.querySelector('.hero .scene');
-    if (hero) {
-      hero.setAttribute('viewBox', narrow ? '270 40 660 460' : '0 0 1200 500');
-      hero.setAttribute('preserveAspectRatio', narrow ? 'xMidYMax meet' : 'xMidYMax slice');
-    }
-    const intro = document.querySelector('.intro-scene');
-    if (intro) intro.setAttribute('preserveAspectRatio', narrow ? 'xMidYMid meet' : 'xMidYMid slice');
-  }
-  addEventListener('resize', fitScenes);
-  fitScenes();
-
-  /* ---------- Schnee über der ganzen Seite ---------- */
-  const snowfall = (() => {
-    const cv = $('#snowfall'); if (!cv || reduced) return { pause() { }, resume() { } };
-    const cx = cv.getContext('2d'); let flakes = [], raf = 0, on = false, last = 0, W = 0, H = 0, d = 1;
-    function size() {
-      d = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
-      cv.width = Math.round(W * d); cv.height = Math.round(H * d);
-      const n = Math.round(Math.min(90, W * H / 14000));
-      flakes = Array.from({ length: n }, () => ({ x: Math.random() * W, y: Math.random() * H, r: 1.2 + Math.random() * 2.8, s: 18 + Math.random() * 40, w: Math.random() * 6.28 }));
-    }
-    function loop(t) {
-      if (!on) return; raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.05, (t - last) / 1000 || 0.016); last = t;
-      cx.setTransform(d, 0, 0, d, 0, 0); cx.clearRect(0, 0, W, H);
-      cx.fillStyle = 'rgba(255,255,255,.9)'; cx.strokeStyle = 'rgba(22,19,15,.35)'; cx.lineWidth = 1;
-      for (const f of flakes) {
-        f.y += f.s * dt; f.w += dt; f.x += Math.sin(f.w) * 12 * dt;
-        if (f.y > H + 6) { f.y = -6; f.x = Math.random() * W; }
-        cx.beginPath(); cx.arc(f.x, f.y, f.r, 0, 6.29); cx.fill(); cx.stroke();
-      }
-    }
-    addEventListener('resize', size); size();
-    return {
-      pause() { on = false; cancelAnimationFrame(raf); cx.clearRect(0, 0, cv.width, cv.height); },
-      resume() { if (on) return; on = true; last = performance.now(); raf = requestAnimationFrame(loop); }
-    };
-  })();
-
-  /* ---------- Frosti, der Schneemann: redet mit euch ---------- */
-  const frosti = (() => {
-    const el = $('#frosti'), bub = $('#bubble'), txt = $('#bubbleTxt');
-    let hideT = 0, talkT = 0, idleT = 0, muted = false, lastLine = '';
-    try { muted = localStorage.getItem('sg_frosti_mini') === '1'; } catch (e) { }
-    const pick = (a) => { let l; do { l = a[Math.floor(Math.random() * a.length)]; } while (a.length > 1 && l === lastLine); lastLine = l; return l; };
-    const name = () => hub.getName(), opp = () => store.opp || 'dein Bruder';
-    const LINES = {
-      hello: () => [`Na, ${name()}! Bereit, ${opp()} fertigzumachen?`, `Hey ${name()}! Ich bin Frosti. Mir ist kalt, also zock schnell was.`, `${name()} ist da! Die Halle zittert schon.`],
-      tap: () => ['Hör auf, mich zu pieksen, ich schmelze sonst!', 'Wusstest du? Schneemänner können keine Tore schießen. Ich hab keine Beine.', 'Mein Lieblingsspiel? Schneeballschlacht. Kommt bald. Vielleicht.', `Wetten, ${opp()} hat heimlich geübt?`, 'Ich bin nicht dick, ich bin nur aus drei Kugeln gebaut.', 'Wer verliert, muss mir eine neue Karotte kaufen.', 'Brrr. Spielt endlich was, mir frieren die Knöpfe ab!'],
-      idle: () => ['Hallo? Ist hier jemand? Air-Hockey wartet!', 'Langweilig … Tippt doch mal auf das große Spiel.', `${opp()} hat gesagt, du traust dich nicht. Nur so.`, 'Ich zähl schon mal die Tore. 1 … 2 …'],
-      airhockey: ['Air-Hockey! Schnell, laut, gemein. Mein Favorit.', 'Tipp: Über die Bande spielen. Das hasst jeder.'],
-      reaction: ['Reaktionsduell kommt bald. Ich bin jetzt schon zu langsam.'],
-      bomber: ['Mini-Bomber? Bitte nicht in meiner Nähe, ich bin aus Schnee!'],
-      arena: ['Arena-PvP baut dein Bruder. Ich hab gehört, es wird brutal.'],
-      zombie: ['Zombies? Die fressen nur Gehirne. Ich hab keins. Glück gehabt.'],
-      win: (h) => [`Sauber! ${h.s} gegen ${h.o}. Die Halle tobt!`, `Gewonnen! ${h.o} braucht jetzt erstmal eine Decke.`],
-      loss: (h) => [`Autsch, ${h.s}. ${h.o} feiert gerade. Revanche?`, `Verloren … Ich hab nichts gesehen. Nochmal?`],
-      lead: (w, l) => [`${w} zu ${l} für dich. ${opp()} sollte langsam nervös werden.`],
-      behind: (w, l) => [`${w} zu ${l}. Hmm. Vielleicht mal üben gegen den Bot?`]
-    };
-    function say(line, ms = 4800) {
-      if (!line || el.hidden) return;
-      if (muted) { muted = false; el.classList.remove('mini'); try { localStorage.removeItem('sg_frosti_mini'); } catch (e) { } }
-      txt.textContent = line; bub.classList.add('show'); el.classList.add('talk');
-      clearTimeout(hideT); clearTimeout(talkT);
-      talkT = setTimeout(() => el.classList.remove('talk'), Math.min(2600, 60 * line.length));
-      hideT = setTimeout(() => bub.classList.remove('show'), ms);
-      armIdle();
-    }
-    function armIdle() { clearTimeout(idleT); idleT = setTimeout(() => { if (!muted && !$('#hub').hidden) say(pick(LINES.idle())); }, 28000); }
-    function mini(v) { muted = v; el.classList.toggle('mini', v); bub.classList.remove('show'); try { v ? localStorage.setItem('sg_frosti_mini', '1') : localStorage.removeItem('sg_frosti_mini'); } catch (e) { } }
-    $('#frostiBtn').addEventListener('click', () => say(pick(LINES.tap())));
-    $('#bubbleX').addEventListener('click', () => mini(true));
-    let hoverT = 0, lastHover = '';
-    $('#grid').addEventListener('pointerover', (e) => {
-      const t = e.target.closest('.tile'); if (!t || t.dataset.id === lastHover || muted) return;
-      lastHover = t.dataset.id; clearTimeout(hoverT);
-      hoverT = setTimeout(() => { const l = LINES[t.dataset.id]; if (l) say(pick(l)); }, 350);
-    });
-    let seenHist = store.history.length ? store.history[0].t : 0;
-    return {
-      start() {
-        el.hidden = false; if (muted) el.classList.add('mini');
-        setTimeout(() => { if (!muted) say(pick(LINES.hello())); }, 700);
-      },
-      back() {
-        if (el.hidden) { this.start(); return; }
-        const h = store.history[0];
-        if (h && h.t !== seenHist) { seenHist = h.t; setTimeout(() => say(pick(h.w ? LINES.win(h) : LINES.loss(h)), 6000), 500); return; }
-        const { w, l } = totals();
-        if (w + l > 0 && Math.random() < 0.5) setTimeout(() => say(pick(w >= l ? LINES.lead(w, l) : LINES.behind(w, l))), 600);
-      }
-    };
-  })();
-
-  /* ---------- Intro ---------- */
-  let ac = null;
-  function boom() {
-    try {
-      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-      const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
-      o.type = 'sawtooth'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.4);
-      g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
-      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.5);
-      const o2 = ac.createOscillator(), g2 = ac.createGain(); o2.type = 'square';
-      o2.frequency.setValueAtTime(660, t + 0.12); o2.frequency.setValueAtTime(880, t + 0.22);
-      g2.gain.setValueAtTime(0.0001, t); g2.gain.setValueAtTime(0.08, t + 0.12); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
-      o2.connect(g2).connect(ac.destination); o2.start(t); o2.stop(t + 0.5);
-    } catch (e) { }
-    try { navigator.vibrate && navigator.vibrate(80); } catch (e) { }
-  }
-  function showIntro() {
-    let seen = false;
-    try { seen = sessionStorage.getItem('sg_intro') === '1'; } catch (e) { }
-    if (seen || location.hash) return;
-    const el = $('#intro'); el.hidden = false;
-    snow(el.querySelector('.snow'), 40, 400, 300, 2.2);
-    const btn = $('#buzzer');
-    setTimeout(() => btn.focus({ preventScroll: true }), reduced ? 0 : 2800);
-    btn.addEventListener('click', () => {
-      try { sessionStorage.setItem('sg_intro', '1'); } catch (e) { }
-      boom(); el.classList.add('go');
-      setTimeout(() => el.classList.add('out'), reduced ? 0 : 380);
-      setTimeout(() => { el.hidden = true; if (!store.name) askName(true); else frosti.start(); }, reduced ? 50 : 850);
-    }, { once: true });
-    return true;
-  }
-
-  /* ---------- Name ändern ---------- */
-  function askName(first) {
-    const el = document.createElement('div');
-    el.className = 'sheet';
-    el.innerHTML = `<form class="box"><h3>${first ? 'Wie heißt du?' : 'Name ändern'}</h3>
-      <input class="field" id="nameIn" maxlength="16" autocomplete="nickname" placeholder="Dein Name">
-      <div class="row">${first ? '' : '<button class="btn" type="button" data-x>Abbrechen</button>'}<button class="btn main" type="submit">Speichern</button></div></form>`;
-    document.body.appendChild(el);
-    const inp = el.querySelector('#nameIn');
-    inp.value = store.name;
-    setTimeout(() => inp.focus(), 50);
-    el.querySelector('form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const v = inp.value.trim().slice(0, 16);
-      if (!v) { inp.focus(); return; }
-      store.name = v; save(); el.remove(); renderAll();
-      if (first) frosti.start();
-    });
-    const x = el.querySelector('[data-x]'); if (x) x.onclick = () => el.remove();
-  }
 
   /* ---------- Umschalten zwischen Startseite und Spiel ---------- */
   let current = null;
@@ -337,12 +253,10 @@
     const mod = game && window.Games && window.Games[id];
     if (current && (!mod || current !== mod)) { try { current.stop(); } catch (e) { console.error(e); } current = null; $('#game').innerHTML = ''; }
     if (mod) {
-      $('#hub').hidden = true; $('#game').hidden = false; demo.pause(); snowfall.pause();
+      $('#hub').hidden = true; $('#game').hidden = false; demo.pause();
       if (!current) { current = mod; mod.start($('#game'), hub); hub.intent = null; }
     } else {
-      const wasGame = !$('#game').hidden;
-      $('#game').hidden = true; $('#hub').hidden = false; renderAll(); demo.resume(); snowfall.resume();
-      if (wasGame) frosti.back();
+      $('#game').hidden = true; $('#hub').hidden = false; renderAll(); demo.resume();
     }
   }
   function open(id, intent) { hub.intent = intent || null; location.hash = id; }
@@ -350,25 +264,29 @@
   let toastT = 0;
   function toast(msg) {
     let t = $('#toast');
-    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'g-net'; t.style.cssText = 'position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;font-size:15px;padding:8px 16px'; document.body.appendChild(t); }
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'g-net'; t.style.cssText = 'position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;font-size:14px;padding:9px 16px;color:var(--ink)'; document.body.appendChild(t); }
     t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 1800);
   }
 
   /* ---------- Start ---------- */
-  document.title = SITE_NAME;
-  renderFilters(); renderTiles(); renderAll();
-  snow(document.querySelector('.hero-snow'), 46, 1200, 500, 4);
-  $('#filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; renderFilters(); renderTiles(); });
-  $('#grid').addEventListener('click', (e) => {
-    const t = e.target.closest('.tile'); if (!t) return;
+  applyName(); renderGames(); renderProjects(); renderAll();
+  $('#games').addEventListener('click', (e) => {
+    const t = e.target.closest('.game'); if (!t) return;
     const g = GAMES.find((x) => x.id === t.dataset.id);
     if (g && g.live) open(g.id); else toast(`${g ? g.title : 'Das Spiel'} ist noch in Arbeit.`);
   });
-  $('#quickPlay').onclick = () => open('airhockey');
-  $('#quickBot').onclick = () => open('airhockey', 'bot');
-  $('#editName').onclick = () => askName(false);
+  $('#playMain').onclick = () => open('airhockey');
+  $('#featureCard').onclick = () => open('airhockey');
+  $('#playBot').onclick = () => open('airhockey', 'bot');
+  $('#acctBtn').onclick = openAccount;
+  $('#standBox').addEventListener('click', (e) => { if (e.target.closest('[data-login]')) openAccount(); });
+  // Bereichs-Links nur scrollen, ohne die Adresse zu ändern (die Adresse steuert die Spiele)
+  document.querySelectorAll('.links a').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault(); const t = document.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
+  }));
+  $('.brand').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' }); });
   addEventListener('hashchange', route);
+  if (window.Auth) { Auth.onChange(() => refreshCloud()); Auth.init(); }
   route();
-  const introShown = showIntro();
-  if (!introShown) { if (!store.name) askName(true); else if (!location.hash) frosti.start(); }
+  if (!store.name && !(window.Auth && Auth.ready) && !location.hash) askName(true);
 })();

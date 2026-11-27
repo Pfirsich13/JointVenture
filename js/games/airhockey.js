@@ -101,7 +101,7 @@
       limitSpeed(p);
       const strength = Math.min(1, -vn / CFG.maxSpeed);
       if (now - lastHitSnd > 0.05) { lastHitSnd = now; snd(320 + strength * 500, 0.05, 'triangle', 0.08 + strength * 0.08); if (ctrlSides().includes(pad.side)) buzz(10 + strength * 20); }
-      rings.push({ x: p.x, y: p.y, t: now, c: pad.side === myRole || (mode === 'local' && pad.side === 'b') ? '#2453ff' : '#ff3a2a', big: strength });
+      rings.push({ x: p.x, y: p.y, t: now, c: pad.side === myRole || (mode === 'local' && pad.side === 'b') ? '#4c7dff' : '#ff4d5e', big: strength });
       if (strength > 0.6) shake = Math.max(shake, 4 * strength);
     }
     return true;
@@ -318,7 +318,7 @@
     const scorer = other(conceder);
     const iScored = mode === 'local' ? null : scorer === myRole;
     const blueSide = mode === 'local' ? 'b' : myRole;
-    flash = { t: now, c: scorer === blueSide ? '#2453ff' : '#ff3a2a', txt: 'TOR!' };
+    flash = { t: now, c: scorer === blueSide ? '#4c7dff' : '#ff4d5e', txt: 'TOR!' };
     shake = 10;
     if (iScored === false) { snd(300, 0.35, 'sawtooth', 0.06, -200); buzz(60); }
     else { snd(520, 0.1, 'square', 0.07); setTimeout(() => snd(780, 0.18, 'square', 0.07), 90); }
@@ -450,23 +450,24 @@
     const w = W * s + pad * 2, h = H * s + pad * 2;
     const c = document.createElement('canvas'); c.width = Math.ceil(w * dpr); c.height = Math.ceil(h * dpr);
     const g = c.getContext('2d'); g.scale(dpr, dpr); g.translate(pad, pad);
-    const ink = '#16130f';
-    g.fillStyle = 'rgba(22,19,15,.25)'; rr(g, -rim + 6, -rim + 8, W * s + rim * 2, H * s + rim * 2, rim * 2.2); g.fill();
-    g.fillStyle = ink; rr(g, -rim, -rim, W * s + rim * 2, H * s + rim * 2, rim * 2.2); g.fill();
-    g.fillStyle = '#f3f6ff'; rr(g, 0, 0, W * s, H * s, rim * 1.3); g.fill();
+    const ink = 'rgba(235,240,255,.28)';
+    g.fillStyle = '#06070a'; rr(g, -rim, -rim, W * s + rim * 2, H * s + rim * 2, rim * 2.2); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 1.5; rr(g, -rim + 1, -rim + 1, W * s + rim * 2 - 2, H * s + rim * 2 - 2, rim * 2.2); g.stroke();
+    const sf = g.createLinearGradient(0, 0, 0, H * s); sf.addColorStop(0, '#151925'); sf.addColorStop(0.5, '#11141d'); sf.addColorStop(1, '#151925');
+    g.fillStyle = sf; rr(g, 0, 0, W * s, H * s, rim * 1.3); g.fill();
     g.save(); rr(g, 0, 0, W * s, H * s, rim * 1.3); g.clip();
-    g.fillStyle = 'rgba(22,19,15,.07)';
+    g.fillStyle = 'rgba(255,255,255,.045)';
     const step = 0.05 * s;
     for (let y = step / 2; y < H * s; y += step) for (let x = step / 2; x < W * s; x += step) { g.beginPath(); g.arc(x, y, Math.max(1, s * 0.0035), 0, 7); g.fill(); }
     const lw = Math.max(2, s * 0.008);
     // Torräume
-    const topC = '#ff3a2a', botC = '#2453ff';   // oben immer Gegner (rot), unten immer ich (blau)
+    const topC = '#ff4d5e', botC = '#4c7dff';   // oben immer Gegner (rot), unten immer ich (blau)
     g.lineWidth = lw * 1.4;
-    g.fillStyle = topC + '18'; g.strokeStyle = topC; g.beginPath(); g.arc(W * s / 2, 0, 0.2 * s, 0, Math.PI); g.fill(); g.stroke();
-    g.fillStyle = botC + '18'; g.strokeStyle = botC; g.beginPath(); g.arc(W * s / 2, H * s, 0.2 * s, Math.PI, 0); g.fill(); g.stroke();
+    g.fillStyle = topC + '1f'; g.strokeStyle = topC + 'cc'; g.beginPath(); g.arc(W * s / 2, 0, 0.2 * s, 0, Math.PI); g.fill(); g.stroke();
+    g.fillStyle = botC + '1f'; g.strokeStyle = botC + 'cc'; g.beginPath(); g.arc(W * s / 2, H * s, 0.2 * s, Math.PI, 0); g.fill(); g.stroke();
     // Hälften leicht einfärben
-    g.fillStyle = topC + '0d'; g.fillRect(0, 0, W * s, H * s / 2);
-    g.fillStyle = botC + '0d'; g.fillRect(0, H * s / 2, W * s, H * s / 2);
+    g.fillStyle = topC + '0a'; g.fillRect(0, 0, W * s, H * s / 2);
+    g.fillStyle = botC + '0a'; g.fillRect(0, H * s / 2, W * s, H * s / 2);
     // Mittellinie und Kreis
     g.strokeStyle = ink; g.lineWidth = lw; g.setLineDash([lw * 3, lw * 2.2]);
     g.beginPath(); g.moveTo(0, H * s / 2); g.lineTo(W * s, H * s / 2); g.stroke(); g.setLineDash([]);
@@ -475,19 +476,19 @@
     g.restore();
     // Tore als Lücken in der Bande
     const gw = CFG.goalW * s;
-    g.fillStyle = '#2a2520';
-    rr(g, W * s / 2 - gw / 2, -rim - 2, gw, rim * 0.9 + 2, 4); g.fill();
-    rr(g, W * s / 2 - gw / 2, H * s + rim * 0.1, gw, rim * 0.9 + 2, 4); g.fill();
+    g.fillStyle = topC + '99'; rr(g, W * s / 2 - gw / 2, -rim * 0.55, gw, rim * 0.45, 3); g.fill();
+    g.fillStyle = botC + '99'; rr(g, W * s / 2 - gw / 2, H * s + rim * 0.1, gw, rim * 0.45, 3); g.fill();
     felt = { c, pad, w, h };
   }
   function drawPad(x, y, col, dark) {
     const [sx, sy] = toTable(x, y), R = CFG.padR * view.s;
-    ctx.fillStyle = 'rgba(22,19,15,.22)'; ctx.beginPath(); ctx.arc(sx + R * 0.12, sy + R * 0.2, R, 0, 7); ctx.fill();
-    ctx.fillStyle = col; ctx.strokeStyle = '#16130f'; ctx.lineWidth = Math.max(2.5, R * 0.1);
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = R * 0.9;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(sx, sy, R, 0, 7); ctx.fill(); ctx.restore();
+    ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = Math.max(1.5, R * 0.06);
     ctx.beginPath(); ctx.arc(sx, sy, R, 0, 7); ctx.fill(); ctx.stroke();
     ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(sx, sy, R * 0.68, 0, 7); ctx.fill();
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(sx, sy, R * 0.42, 0, 7); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(sx - R * 0.14, sy - R * 0.16, R * 0.16, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.arc(sx - R * 0.14, sy - R * 0.16, R * 0.14, 0, 7); ctx.fill();
   }
   // Text im Tisch, aber immer aufrecht lesbar (auch im Querformat)
   function uprightText(x, y, upsideDown, fn) {
@@ -499,22 +500,22 @@
   }
   function drawScore(side, y, upsideDown) {
     uprightText(W * view.s / 2, y, upsideDown, () => {
-      ctx.font = `400 ${Math.round(view.s * 0.2)}px Bungee, Impact, sans-serif`;
-      ctx.fillStyle = 'rgba(22,19,15,.10)'; ctx.fillText(String(score[side]), 0, 0);
+      ctx.font = `800 ${Math.round(view.s * 0.2)}px Sora, system-ui, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillText(String(score[side]), 0, 0);
     });
   }
   function bigText(t, col, k) {
     const size = view.s * 0.28 * (0.8 + 0.2 * Math.min(1, k));
     uprightText(W * view.s / 2, H * view.s / 2, false, () => {
-      ctx.font = `400 ${Math.round(size)}px Bungee, Impact, sans-serif`;
-      ctx.lineWidth = Math.max(4, size * 0.09); ctx.strokeStyle = '#fff8e1'; ctx.strokeText(t, 0, 0);
+      ctx.font = `800 ${Math.round(size)}px Sora, system-ui, sans-serif`;
+      ctx.lineWidth = Math.max(4, size * 0.09); ctx.strokeStyle = 'rgba(8,9,12,.85)'; ctx.strokeText(t, 0, 0);
       ctx.fillStyle = col; ctx.fillText(t, 0, 0);
     });
   }
   function draw() {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const bg = ctx.createLinearGradient(0, 0, 0, ch); bg.addColorStop(0, '#5aa9ff'); bg.addColorStop(1, '#cfeaff');
+    const bg = ctx.createRadialGradient(cw / 2, ch * 0.45, 0, cw / 2, ch * 0.45, Math.max(cw, ch) * 0.75); bg.addColorStop(0, '#161a2a'); bg.addColorStop(1, '#0b0c10');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, cw, ch);
     if (!pads) return;
     view.flip = mode === 'online' && myRole === 't';
@@ -541,23 +542,23 @@
     const pr = CFG.puckR * s;
     for (let i = 0; i < trail.length; i++) {
       const [sx, sy] = toTable(trail[i].x, trail[i].y);
-      ctx.fillStyle = `rgba(22,19,15,${(i / trail.length) * 0.12})`; ctx.beginPath(); ctx.arc(sx, sy, pr * (0.5 + i / trail.length / 2), 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(242,244,250,${(i / trail.length) * 0.14})`; ctx.beginPath(); ctx.arc(sx, sy, pr * (0.5 + i / trail.length / 2), 0, 7); ctx.fill();
     }
     // Scheibe
     const [px, py] = toTable(rPuck.x, rPuck.y);
-    ctx.fillStyle = 'rgba(22,19,15,.25)'; ctx.beginPath(); ctx.arc(px + pr * 0.15, py + pr * 0.25, pr, 0, 7); ctx.fill();
-    ctx.fillStyle = '#16130f'; ctx.beginPath(); ctx.arc(px, py, pr, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = Math.max(2, pr * 0.22); ctx.beginPath(); ctx.arc(px, py, pr * 0.55, 0, 7); ctx.stroke();
+    ctx.save(); ctx.shadowColor = 'rgba(255,255,255,.8)'; ctx.shadowBlur = pr * 0.9;
+    ctx.fillStyle = '#f2f4fa'; ctx.beginPath(); ctx.arc(px, py, pr, 0, 7); ctx.fill(); ctx.restore();
+    ctx.strokeStyle = 'rgba(13,14,18,.35)'; ctx.lineWidth = Math.max(1.5, pr * 0.16); ctx.beginPath(); ctx.arc(px, py, pr * 0.55, 0, 7); ctx.stroke();
 
     // Schläger: ich blau, Gegner rot
     const blueSide = mode === 'local' ? 'b' : myRole;
-    drawPad(pads[other(blueSide)].x, pads[other(blueSide)].y, '#ff3a2a', '#c41f12');
-    drawPad(pads[blueSide].x, pads[blueSide].y, '#2453ff', '#1435b8');
+    drawPad(pads[other(blueSide)].x, pads[other(blueSide)].y, '#ff4d5e', '#b8293a');
+    drawPad(pads[blueSide].x, pads[blueSide].y, '#4c7dff', '#2a49b8');
 
     // Countdown und Tor
     if (phase === 'count') {
       const n = Math.ceil(phaseUntil - now);
-      bigText(n > 0 ? String(n) : 'LOS!', '#16130f', 1 - ((phaseUntil - now) % 1));
+      bigText(n > 0 ? String(n) : 'LOS!', '#eef0f6', 1 - ((phaseUntil - now) % 1));
     }
     if (flash) {
       const a = (now - flash.t) / 1.2;
@@ -572,7 +573,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (mode === 'online' && conn && conn.status !== 'connected' && ui.panelState === null && phase !== 'over') {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = '600 15px Rubik, sans-serif'; ctx.fillStyle = '#16130f';
+      ctx.font = '600 15px Inter, sans-serif'; ctx.fillStyle = '#9aa0b3';
       ctx.fillText('Warte auf Verbindung …', cw / 2, view.rot ? ch - 14 : view.oy - 18);
     }
   }
