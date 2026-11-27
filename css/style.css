@@ -254,3 +254,11 @@ details.new[open] summary{margin-bottom:14px}
 .pend-note{border-top:0;padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line);font-size:14px;color:#d9d0ff}
 .form .check{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--mute);cursor:pointer;min-height:40px}
 .form .check input{width:18px;height:18px;margin:0;accent-color:var(--blue)}
+.bk-last{margin:0;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:15px}
+.bk-help{font-size:14px;color:var(--mute);line-height:1.55}
+.bk-help summary{cursor:pointer;color:var(--ink);font-weight:600;min-height:40px;display:flex;align-items:center}
+.bk-help ol{margin:6px 0 8px;padding-left:20px}
+.bk-help li{margin:4px 0}
+.bk-help p{margin:0}
+.bk-remind{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-color:rgba(255,190,80,.35);background:rgba(255,190,80,.06)}
+.bk-remind span{font-size:15px}

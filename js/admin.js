@@ -2,7 +2,7 @@
    admin.js – Admin-Panel (nur für Admins sichtbar, Adresse #admin)
    -------------------------------------------------------------------------
    Bereiche: Übersicht, Texte, Spiele (inkl. Upload), Projekte, Spieler,
-   Einstellungen (Ankündigung, Wartungsmodus, Export).
+   Einstellungen (Ankündigung, Wartungsmodus), Backup (in Google Drive).
    Die Datenbank prüft selbst, ob jemand Admin ist. Dieses Panel ist nur
    die Oberfläche dafür.
    ========================================================================= */
@@ -12,7 +12,7 @@
   const now = () => new Date().toISOString();
   const TABS = [
     ['overview', 'Übersicht'], ['texts', 'Texte'], ['games', 'Spiele'],
-    ['projects', 'Projekte'], ['players', 'Spieler'], ['settings', 'Einstellungen']
+    ['projects', 'Projekte'], ['players', 'Spieler'], ['settings', 'Einstellungen'], ['backup', 'Backup']
   ];
   const STATUS_OPTS = [['live', 'Spielbar'], ['beta', 'Beta'], ['soon', 'Bald'], ['hidden', 'Versteckt'], ['review', 'Zur Freigabe']];
   let root = null, ctx = null, tab = 'overview';
@@ -38,18 +38,21 @@
       <nav class="adm-tabs" role="tablist">${TABS.map(([id, n]) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === tab}">${n}</button>`).join('')}</nav>
       <div class="adm-body" id="admBody"><p class="empty">Lädt …</p></div></div>`;
     root.querySelector('.adm-tabs').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-tab]'); if (!b) return;
-      tab = b.dataset.tab; try { sessionStorage.setItem('jv_admin_tab', tab); } catch (err) { }
-      root.querySelectorAll('[data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
-      show();
+      const b = e.target.closest('[data-tab]'); if (b) goTab(b.dataset.tab);
     });
+    show();
+  }
+  function goTab(id) {
+    if (!TABS.some(([t]) => t === id)) return;
+    tab = id; try { sessionStorage.setItem('jv_admin_tab', tab); } catch (err) { }
+    root.querySelectorAll('.adm-tabs [data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === id)));
     show();
   }
   function show() {
     // frisches Element, damit keine alten Klick-Handler hängen bleiben
     const old = root.querySelector('#admBody'), body = old.cloneNode(false); old.replaceWith(body);
     body.innerHTML = '<p class="empty">Lädt …</p>';
-    ({ overview, texts, games, projects, players, settings })[tab](body).catch((e) => { body.innerHTML = `<p class="msg">Konnte nicht laden: ${esc(e.message || e)}</p>`; });
+    ({ overview, texts, games, projects, players, settings, backup })[tab](body).catch((e) => { body.innerHTML = `<p class="msg">Konnte nicht laden: ${esc(e.message || e)}</p>`; });
   }
 
   /* ---------- Übersicht ---------- */
@@ -68,7 +71,9 @@
     const top = Object.entries(perGame).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const max = top.length ? top[0][1] : 1;
     const pending = (Content.get().games || []).filter((g) => g.status === 'review');
+    const bk = Content.get().backup, bkDays = bk && bk.at ? (Date.now() - Date.parse(bk.at)) / 864e5 : Infinity;
     body.innerHTML = `
+      ${bkDays > 7 ? `<div class="panel bk-remind"><span>${bk && bk.at ? `Letztes Backup ${ago(bk.at)}.` : 'Es gibt noch kein Backup.'} Sichere die Seite in Google Drive.</span><button class="btn primary" type="button" data-go="backup">Jetzt sichern</button></div>` : ''}
       ${pending.length ? `<div class="panel pending-box"><h3>Wartet auf deine Freigabe</h3>${pending.map((g) => `<div class="pend" data-id="${esc(g.id)}"><span><b>${esc(g.title)}</b><small>${g.version ? 'Version ' + esc(g.version) + ' · ' : ''}<a href="#${esc(g.id)}">Jetzt testen</a></small></span><span class="pend-btns"><button class="btn" type="button" data-release="beta">Als Beta</button><button class="btn primary" type="button" data-release="live">Spielbar</button></span></div>`).join('')}</div>` : ''}
       <div class="kpis">
         <div class="kpi"><strong>${pr.data.length}</strong><span>Spieler</span></div>
@@ -81,6 +86,8 @@
         <div class="panel"><h3>Letzte Matches</h3>${res.length ? `<ol class="hist">${res.slice(0, 10).map((r) => `<li><span><b>${esc(names[r.user_id] || 'Spieler')}: ${esc(titles[r.game] || r.game)} gegen ${esc(r.opponent || 'Gegner')}</b><small>${r.mode === 'online' ? 'Online' : r.mode === 'bot' ? 'Training' : 'Lokal'} · ${ago(r.created_at)}</small></span><span class="sc">${esc(r.score || '')}</span><span class="res ${r.won ? 'w' : 'l'}">${r.won ? 'Sieg' : 'Niederlage'}</span></li>`).join('')}</ol>` : '<p class="empty">Noch keine Matches.</p>'}</div>
       </div>`;
   }
+
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b && root && root.contains(b)) goTab(b.dataset.go); });
 
   // Freischalten (Übersicht und Spiele-Karten)
   async function release(id, status) {
@@ -341,10 +348,9 @@
         <label class="switch"><input type="checkbox" name="on" ${m.on ? 'checked' : ''}><span>Wartungsmodus an</span></label>
         <label class="f"><span>Text</span><input class="field" name="text" maxlength="160" value="${esc(m.text)}"></label>
         <div class="row"><button class="btn primary" type="submit">Speichern</button></div></form>
-      <div class="panel form"><h3>Sicherung</h3>
-        <p class="hint">Lädt alle Texte, Spiele, Projekte, Spieler und Ergebnisse als Datei herunter.</p>
-        <div class="row"><button class="btn" type="button" id="exportBtn">Daten exportieren</button>
-        <a class="btn" href="https://supabase.com/dashboard/project/gekavukdzlhnhgpjyyyd" target="_blank" rel="noopener">Supabase öffnen</a></div></div>`;
+      <div class="panel form"><h3>Datenbank</h3>
+        <p class="hint">Alles, was hier im Admin-Bereich gespeichert wird, liegt bei Supabase. Backups machst du im Reiter „Backup“.</p>
+        <div class="row"><a class="btn" href="https://supabase.com/dashboard/project/gekavukdzlhnhgpjyyyd" target="_blank" rel="noopener">Supabase öffnen</a></div></div>`;
     const bind = (id, key, label) => body.querySelector(id).addEventListener('submit', async (e) => {
       e.preventDefault(); const f = e.target, btn = f.querySelector('[type=submit]'); busy(btn, true);
       const value = { on: f.elements.on.checked, text: f.elements.text.value.trim() };
@@ -353,18 +359,146 @@
     });
     bind('#annForm', 'announcement', 'Ankündigung gespeichert');
     bind('#mntForm', 'maintenance', 'Wartungsmodus gespeichert');
-    body.querySelector('#exportBtn').onclick = async () => {
-      try {
-        const tables = ['site_settings', 'games', 'projects', 'profiles', 'results'];
-        const out = { exportiert: now() };
-        for (const t of tables) { const { data, error } = await db().from(t).select('*'); if (error) throw error; out[t] = data; }
-        const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
-        const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob);
-        a2.download = `jointventure-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a2); a2.click(); a2.remove(); setTimeout(() => URL.revokeObjectURL(a2.href), 5000);
-        ctx.toast('Sicherung heruntergeladen');
-      } catch (err) { fail(err); }
+  }
+
+  /* ---------- Backup ---------- */
+  // Am PC (Edge, Chrome) darf die Seite direkt in einen Ordner schreiben. Liegt der Ordner in
+  // Google Drive für den Computer (z. B. F:\Meine Ablage\…), lädt Google Drive die Datei von selbst hoch.
+  const canPickFolder = typeof window.showDirectoryPicker === 'function';
+
+  // Den gewählten Ordner merken (nur auf diesem Gerät, im Browser-Speicher)
+  function kv(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('jv-admin', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('kv');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        try {
+          const tx = open.result.transaction('kv', mode), req = fn(tx.objectStore('kv'));
+          tx.oncomplete = () => { open.result.close(); resolve(req && req.result); };
+          tx.onerror = () => reject(tx.error);
+        } catch (e) { open.result.close(); reject(e); }
+      };
+    });
+  }
+  const savedFolder = () => kv('readonly', (st) => st.get('backupDir')).catch(() => null);
+  const rememberFolder = (h) => kv('readwrite', (st) => st.put(h, 'backupDir')).catch(() => { });
+
+  async function backupFolder(pickNew) {
+    let dir = pickNew ? null : await savedFolder();
+    if (dir) {
+      let perm = await dir.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') perm = await dir.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') return dir;
+    }
+    dir = await window.showDirectoryPicker({ id: 'jv-backup', mode: 'readwrite' });
+    dir.isNew = true;                                      // wird nach dem Speichern gemerkt
+    return dir;
+  }
+
+  const toBase64 = (blob) => new Promise((resolve, reject) => {
+    const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1] || ''); r.onerror = () => reject(r.error); r.readAsDataURL(blob);
+  });
+
+  // Alles einsammeln: Tabellen und die hochgeladenen Dateien (Spiele, Titelbilder)
+  async function buildBackup(step) {
+    const out = {
+      app: 'JointVenture', format: 1, erstellt: now(), von: Auth.name() || '',
+      hinweis: 'Backup der Seite https://pfirsich13.github.io/JointVenture/ . Zum Wiederherstellen diese Datei an Claude geben. Der Code der Seite liegt auf GitHub (Pfirsich13/JointVenture).',
+      tabellen: {}, dateien: {}
     };
+    for (const t of ['site_settings', 'games', 'projects', 'profiles', 'results']) {
+      step(`Lese ${t} …`);
+      const rows = [];
+      for (let from = 0; ; from += 1000) {                  // in Blöcken, damit nichts abgeschnitten wird
+        const { data, error } = await db().from(t).select('*').range(from, from + 999);
+        if (error) throw error;
+        rows.push(...data); if (data.length < 1000) break;
+      }
+      out.tabellen[t] = rows;
+    }
+    const bucket = db().storage.from('games');
+    const { data: top, error } = await bucket.list('', { limit: 1000 });
+    if (error) throw error;
+    const paths = [];
+    for (const item of top || []) {
+      if (item.id) { paths.push(item.name); continue; }   // Datei direkt im Speicher
+      const { data: files, error: e2 } = await bucket.list(item.name, { limit: 1000 });
+      if (e2) throw e2;
+      (files || []).filter((f) => f.id).forEach((f) => paths.push(`${item.name}/${f.name}`));
+    }
+    for (const path of paths) {
+      step(`Lade ${path} …`);
+      const { data: blob, error: e3 } = await bucket.download(path);
+      if (e3) throw e3;
+      out.dateien[path] = { typ: blob.type, base64: await toBase64(blob) };
+    }
+    return out;
+  }
+  function backupName() {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    return `JointVenture-Backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}.json`;
+  }
+  const mb = (n) => n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+
+  async function backup(body) {
+    const { data: row } = await db().from('site_settings').select('value').eq('key', 'backup').maybeSingle();
+    const last = row && row.value;
+    const dir = canPickFolder ? await savedFolder() : null;
+    body.innerHTML = `
+      <div class="panel form"><h3>Backup</h3>
+        <p class="hint">Sichert alle Texte, Spiele (auch hochgeladene Spieldateien und Titelbilder), Projekte, Spieler und Ergebnisse in einer Datei. Der Code der Seite liegt zusätzlich auf GitHub.</p>
+        <p class="bk-last">${last && last.at ? `Letztes Backup <b>${ago(last.at)}</b>${last.by ? ' von ' + esc(last.by) : ''} · ${mb(last.bytes || 0)}${last.ziel ? ' · ' + esc(last.ziel) : ''}` : 'Noch kein Backup gemacht.'}</p>
+        ${canPickFolder ? `
+          <p class="hint">Ordner auf diesem Gerät: <b id="bkDir">${dir ? esc(dir.name) : 'noch keiner gewählt'}</b></p>
+          <div class="row">${dir ? '<button class="btn" type="button" id="bkPick">Ordner ändern</button>' : ''}<button class="btn" type="button" id="bkDownload">Als Datei herunterladen</button><button class="btn primary" type="button" id="bkDrive">Backup in Google Drive speichern</button></div>
+          <details class="bk-help" ${dir ? '' : 'open'}><summary>So landet das Backup in Google Drive</summary>
+            <ol><li>Auf „Backup in Google Drive speichern“ klicken. Beim ersten Mal öffnet sich ein Fenster zur Ordnerwahl.</li>
+            <li>Links <b>Google Drive</b> bzw. <b>Meine Ablage</b> (bei dir Laufwerk F:) öffnen, dann „Projekt Handy Game“.</li>
+            <li>Dort mit „Neuer Ordner“ einen Ordner <b>JointVenture-Backups</b> anlegen, ihn anklicken und „Ordner auswählen“.</li>
+            <li>Die Frage des Browsers mit „Dateien bearbeiten“ bzw. „Zulassen“ bestätigen.</li></ol>
+            <p>Danach reicht ein Klick. Google Drive lädt jede Datei von selbst hoch. Nach einem Neustart des Browsers fragt er einmal kurz nach, ob er wieder in den Ordner schreiben darf.</p></details>`
+        : `<p class="hint">Auf diesem Gerät kann die Seite nicht direkt in einen Ordner schreiben (geht am PC mit Edge oder Chrome). Lade das Backup herunter und lege es in Google Drive ab, am iPhone über Teilen → „In Dateien sichern“ → Google Drive.</p>
+          <div class="row"><button class="btn primary" type="button" id="bkDownload">Backup herunterladen</button></div>`}
+        <p class="msg" id="bkMsg" aria-live="polite"></p>
+      </div>`;
+    const msg = body.querySelector('#bkMsg'), btns = [...body.querySelectorAll('button')];
+    const lock = (on) => btns.forEach((b) => { b.disabled = on; });
+    async function run(toDrive) {
+      msg.className = 'msg'; msg.textContent = ''; lock(true);
+      try {
+        const folder = toDrive ? await backupFolder(false) : null;     // zuerst: braucht den frischen Klick
+        const data = await buildBackup((t) => { msg.textContent = t; });
+        const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), name = backupName();
+        if (folder) {
+          msg.textContent = 'Speichere …';
+          const fh = await folder.getFileHandle(name, { create: true });
+          const w = await fh.createWritable(); await w.write(blob); await w.close();
+          if (folder.isNew) await rememberFolder(folder);
+        } else {
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        }
+        const info = { at: now(), by: Auth.name() || '', bytes: blob.size, ziel: folder ? `Ordner „${folder.name}“` : 'Download', datei: name };
+        await db().from('site_settings').upsert({ key: 'backup', value: info, updated_at: now() });
+        await ctx.refresh();
+        ctx.toast(folder ? 'Backup gespeichert' : 'Backup heruntergeladen');
+        show();
+      } catch (err) {
+        lock(false);
+        if (err && err.name === 'AbortError') { msg.textContent = 'Kein Ordner gewählt, nichts gespeichert.'; return; }
+        console.error(err); msg.textContent = 'Das Backup hat nicht geklappt: ' + ((err && err.message) || err);
+      }
+    }
+    if (canPickFolder) {
+      body.querySelector('#bkDrive').onclick = () => run(true);
+      const pick = body.querySelector('#bkPick');
+      if (pick) pick.onclick = async () => {
+        try { await rememberFolder(await backupFolder(true)); ctx.toast('Ordner gewählt'); show(); }
+        catch (err) { if (!err || err.name !== 'AbortError') { console.error(err); msg.textContent = 'Ordner konnte nicht gewählt werden: ' + ((err && err.message) || err); } }
+      };
+    }
+    body.querySelector('#bkDownload').onclick = () => run(false);
   }
 
   window.Admin = { render };
