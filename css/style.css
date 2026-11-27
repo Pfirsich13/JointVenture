@@ -252,3 +252,5 @@ details.new[open] summary{margin-bottom:14px}
 .pend-btns .btn{min-height:40px;padding:8px 14px;font-size:14px}
 .card.pending{border-color:rgba(138,107,255,.5)}
 .pend-note{border-top:0;padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line);font-size:14px;color:#d9d0ff}
+.form .check{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--mute);cursor:pointer;min-height:40px}
+.form .check input{width:18px;height:18px;margin:0;accent-color:var(--blue)}

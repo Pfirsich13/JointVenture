@@ -84,6 +84,9 @@
     const set = (id, v) => { const el = $(id); if (el && v != null) el.textContent = v; };
     set('#kicker', site.kicker); set('#tagline', site.tagline); set('#lead', site.lead);
     set('#gamesHint', site.gamesHint); set('#projectsHint', site.projectsHint); set('#footerTxt', site.footer);
+    // Startseite: Air-Hockey-Knöpfe nur, solange es das Spiel gibt
+    const ah = playable(findGame('airhockey'));
+    $('#playMain').hidden = !ah; $('#playBot').hidden = !ah; $('#featureCard').hidden = !ah;
     // Ankündigung
     const a = C().announcement || {};
     $('#banner').hidden = !(a.on && a.text);
@@ -331,7 +334,8 @@
         $('#mainView').hidden = true; $('#maint').hidden = true; $('#adminView').hidden = false;
         Admin.render($('#adminView'), { refresh: () => Content.load(), toast });
       } else if (window.Auth && Auth.ready && !Auth.user()) {
-        $('#adminView').hidden = true; $('#mainView').hidden = false; openAccount();
+        // Erst fragen, wenn feststeht, dass niemand angemeldet ist (sonst blitzt das Fenster kurz auf)
+        $('#adminView').hidden = true; $('#mainView').hidden = false; if (Auth.loaded) openAccount();
       } else { history.replaceState(null, '', location.pathname + location.search); route(); }
       scrollTo(0, 0);
       return;

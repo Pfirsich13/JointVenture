@@ -17,7 +17,7 @@
 (function () {
   const S = window.SITE || {};
   const configured = !!(S.supabaseUrl && S.supabaseKey);
-  let client = null, user = null, profileName = '', role = 'player', failed = false;
+  let client = null, user = null, profileName = '', role = 'player', failed = false, loaded = false;
   const listeners = [];
   const emit = () => listeners.forEach((fn) => { try { fn(user); } catch (e) { console.error(e); } });
 
@@ -41,18 +41,18 @@
   }
 
   async function init() {
-    if (!configured) { emit(); return; }
+    if (!configured) { loaded = true; emit(); return; }
     try {
       await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js');
       client = window.supabase.createClient(S.supabaseUrl, S.supabaseKey);
       const { data } = await client.auth.getSession();
       user = data.session ? data.session.user : null;
-      await loadProfile(); emit();
+      await loadProfile(); loaded = true; emit();
       client.auth.onAuthStateChange(async (_e, session) => {
         user = session ? session.user : null;
         await loadProfile(); emit();
       });
-    } catch (e) { console.warn('Anmeldung nicht erreichbar:', e.message); failed = true; emit(); }
+    } catch (e) { console.warn('Anmeldung nicht erreichbar:', e.message); failed = true; loaded = true; emit(); }
   }
 
   const deErr = (e) => {
@@ -71,6 +71,8 @@
   const need = () => { if (!client) throw new Error('Die Anmeldung ist gerade nicht erreichbar. Bitte später nochmal versuchen.'); };
   window.Auth = {
     get ready() { return configured && !failed; },
+    /** true, sobald feststeht, ob jemand angemeldet ist */
+    get loaded() { return loaded; },
     init,
     user: () => user,
     name: () => profileName,

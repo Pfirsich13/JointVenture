@@ -145,7 +145,7 @@
     const { data: list, error } = await db().from('games').select('*').order('sort').order('title');
     if (error) throw error;
     body.innerHTML = `
-      <details class="panel new" ${list.length ? '' : 'open'}><summary>+ Neues Spiel oder Beta-Version hochladen</summary>
+      <details class="panel new" ${list.length ? '' : 'open'}><summary>+ Neues Spiel, Beta-Version oder Platzhalter</summary>
         <form class="form" id="newGame">
           <p class="hint">Ein Spiel ist eine einzelne HTML-Datei, in der alles steckt (wie der Arena-Prototyp). Es läuft abgeschirmt in einem eigenen Rahmen.</p>
           <label class="f"><span>Titel</span><input class="field" name="title" maxlength="40" required></label>
@@ -153,7 +153,8 @@
           <label class="f"><span>Beschreibung</span><textarea class="field" name="description" maxlength="200" rows="2"></textarea></label>
           <div class="f2"><label class="f"><span>Status</span><select class="field" name="status">${STATUS_OPTS.map(([v, n]) => `<option value="${v}" ${v === 'beta' ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label class="f"><span>Version</span><input class="field" name="version" maxlength="20" value="0.1"></label></div>
-          <label class="f"><span>Spieldatei (.html)</span><input class="field" name="file" type="file" accept=".html,.htm,text/html" required></label>
+          <label class="check"><input type="checkbox" name="placeholder"> <span>Nur Platzhalter, ohne Datei (erscheint als „Bald“)</span></label>
+          <label class="f" data-filebox><span>Spieldatei (.html)</span><input class="field" name="file" type="file" accept=".html,.htm,text/html"></label>
           <label class="f"><span>Titelbild (optional)</span><input class="field" name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label>
           <p class="msg"></p>
           <div class="row"><button class="btn primary" type="submit">Hochladen</button></div>
@@ -163,23 +164,29 @@
     const nf = body.querySelector('#newGame');
     nf.elements.title.addEventListener('input', () => { if (!nf.elements.id.dataset.touched) nf.elements.id.value = slug(nf.elements.title.value); });
     nf.elements.id.addEventListener('input', () => { nf.elements.id.dataset.touched = '1'; });
+    nf.elements.placeholder.addEventListener('change', () => {
+      const ph = nf.elements.placeholder.checked;
+      nf.querySelector('[data-filebox]').hidden = ph;
+      nf.elements.status.value = ph ? 'soon' : 'beta'; nf.elements.status.disabled = ph;
+      nf.querySelector('[type=submit]').textContent = ph ? 'Platzhalter anlegen' : 'Hochladen';
+    });
     nf.addEventListener('submit', async (e) => {
       e.preventDefault(); const msg = nf.querySelector('.msg'); msg.textContent = '';
-      const id = slug(nf.elements.id.value), file = nf.elements.file.files[0], cover = nf.elements.cover.files[0];
-      const problem = (!/^[a-z0-9-]{2,40}$/.test(id) && 'Kurzname: nur a-z, 0-9 und Bindestrich, mind. 2 Zeichen.') || (list.some((g) => g.id === id) && 'Diesen Kurznamen gibt es schon.') || ['admin'].includes(id) && 'Dieser Kurzname ist reserviert.' || checkHtml(file) || checkImg(cover);
+      const id = slug(nf.elements.id.value), file = nf.elements.file.files[0], cover = nf.elements.cover.files[0], ph = nf.elements.placeholder.checked;
+      const problem = (!/^[a-z0-9-]{2,40}$/.test(id) && 'Kurzname: nur a-z, 0-9 und Bindestrich, mind. 2 Zeichen.') || (list.some((g) => g.id === id) && 'Diesen Kurznamen gibt es schon.') || ['admin'].includes(id) && 'Dieser Kurzname ist reserviert.' || (!ph && checkHtml(file)) || checkImg(cover);
       if (problem) { msg.textContent = problem; return; }
       const btn = nf.querySelector('[type=submit]'); busy(btn, true);
       try {
-        await uploadFile(`${id}/index.html`, file, true);
+        if (!ph) await uploadFile(`${id}/index.html`, file, true);
         let cover_path = null;
         if (cover) { cover_path = `${id}/cover.${imgExt(cover)}`; await uploadFile(cover_path, cover, false); }
         const maxSort = list.reduce((m, g) => Math.max(m, g.sort), 0);
         const { error: err } = await db().from('games').insert({
-          id, title: nf.elements.title.value.trim(), description: nf.elements.description.value.trim(), status: nf.elements.status.value,
-          kind: 'upload', file_path: `${id}/index.html`, cover_path, version: nf.elements.version.value.trim() || null, sort: maxSort + 10, updated_at: now()
+          id, title: nf.elements.title.value.trim(), description: nf.elements.description.value.trim(), status: ph ? 'soon' : nf.elements.status.value,
+          kind: ph ? 'builtin' : 'upload', file_path: ph ? null : `${id}/index.html`, cover_path, version: ph ? null : (nf.elements.version.value.trim() || null), sort: maxSort + 10, updated_at: now()
         });
         if (err) throw err;
-        await saved('Spiel hochgeladen'); show();
+        await saved(ph ? 'Platzhalter angelegt' : 'Spiel hochgeladen'); show();
       } catch (err) { msg.textContent = 'Fehler: ' + (err.message || err); busy(btn, false); }
     });
 
@@ -196,7 +203,12 @@
         await saved('Reihenfolge geändert'); show();
       }
       if (b.dataset.act === 'del') {
-        if (!confirm(`„${g.title}“ wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+        const question = g.kind === 'upload'
+          ? `„${g.title}“ wirklich löschen? Die hochgeladene Spieldatei wird mit gelöscht. Das kann nicht rückgängig gemacht werden.`
+          : isPlaceholder(g)
+            ? `Platzhalter „${g.title}“ löschen?`
+            : `„${g.title}“ von der Seite löschen? Die Kachel verschwindet für alle. Der Spiel-Code bleibt im Projekt gespeichert, Claude kann das Spiel jederzeit wieder eintragen.`;
+        if (!confirm(question)) return;
         try {
           const { data: files } = await db().storage.from('games').list(g.id);
           if (files && files.length) await db().storage.from('games').remove(files.map((f) => `${g.id}/${f.name}`));
@@ -221,11 +233,13 @@
       } catch (err) { msg.textContent = 'Fehler: ' + (err.message || err); busy(btn, false); }
     });
   }
+  const isPlaceholder = (g) => g.kind === 'builtin' && g.status === 'soon';
+  const KIND_LABEL = (g) => g.kind === 'upload' ? 'Hochgeladen' : g.kind === 'page' ? 'Eigener Ordner' : isPlaceholder(g) ? 'Platzhalter' : 'Eingebaut';
   function gameCard(g, i, n) {
     const up = g.kind === 'upload';
     return `<article class="panel card ${g.status === 'review' ? 'pending' : ''}" data-id="${esc(g.id)}">
       ${g.status === 'review' ? `<div class="pend-note"><span>Neu, wartet auf Freigabe. <a href="#${esc(g.id)}">Testen</a></span><span class="pend-btns"><button class="btn" type="button" data-release="beta">Als Beta</button><button class="btn primary" type="button" data-release="live">Spielbar</button></span></div>` : ''}
-      <div class="card-head"><div><b>${esc(g.title)}</b><small>${up ? 'Hochgeladen' : 'Eingebaut'} · #${esc(g.id)}${g.updated_at ? ' · geändert ' + ago(g.updated_at) : ''}</small></div>
+      <div class="card-head"><div><b>${esc(g.title)}</b><small>${KIND_LABEL(g)} · #${esc(g.id)}${g.updated_at ? ' · geändert ' + ago(g.updated_at) : ''}</small></div>
         <div class="ord"><button class="icon" type="button" data-act="up" aria-label="Nach oben" ${i === 0 ? 'disabled' : ''}>↑</button><button class="icon" type="button" data-act="down" aria-label="Nach unten" ${i === n - 1 ? 'disabled' : ''}>↓</button></div></div>
       <form class="form">
         <label class="f"><span>Titel</span><input class="field" name="title" maxlength="40" value="${esc(g.title)}"></label>
@@ -235,7 +249,7 @@
         ${up ? `<label class="f"><span>Neue Version hochladen (.html, optional)</span><input class="field" name="file" type="file" accept=".html,.htm,text/html"></label>` : ''}
         <label class="f"><span>Titelbild ${g.cover_path ? 'ersetzen' : 'hinzufügen'} (optional)</span><input class="field" name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label>
         <p class="msg"></p>
-        <div class="row">${up ? '<button class="btn danger" type="button" data-act="del">Löschen</button>' : ''}<button class="btn primary" type="submit">Speichern</button></div>
+        <div class="row"><button class="btn danger" type="button" data-act="del">Löschen</button><button class="btn primary" type="submit">Speichern</button></div>
       </form></article>`;
   }
 
