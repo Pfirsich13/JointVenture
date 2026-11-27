@@ -298,6 +298,7 @@
     const code = Net.newCode();
     mode = 'online'; myRole = 'b';
     showPanel('host', '', code);
+    if (hub.roomOpened) hub.roomOpened('airhockey', code);                 // Herausforderung: Einladung geht als Nachricht raus
     try { conn = await Net.host('airhockey', code, { onMessage, onStatus }); }
     catch (e) { showPanel('menu', 'Online-Verbindung konnte nicht starten: ' + e.message); }
   }

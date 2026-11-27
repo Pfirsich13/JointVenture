@@ -76,6 +76,11 @@
     login: () => openAccount(),
     /** Spiele, zu denen man Freunde herausfordern kann */
     onlineGames: () => visibleGames().filter((g) => playable(g) && ONLINE_GAMES.includes(g.id)),
+    /** Ein Spiel meldet: Raum ist offen. Bei einer Herausforderung geht die Einladung automatisch raus. */
+    roomOpened(game, code) {
+      const ch = hub.challenge;
+      if (ch && ch.game === game && ch.sent !== code) { ch.sent = code; hub.invite(game, code, 'auto'); }
+    },
     /** Freund herausfordern: Spiel öffnen (Air-Hockey erstellt gleich einen Raum), Einladung dann über hub.invite */
     startChallenge(friend, game) {
       hub.challenge = { id: friend.id, name: friend.name, game };
@@ -85,9 +90,18 @@
     back() { if (location.hash) history.replaceState(null, '', location.pathname + location.search); route(); },
     report(gameId) { openReport(gameId); },                // Spiele können so „Fehler melden“ öffnen
     inviteLink: (game, code) => `${location.origin}${location.pathname}#${game}/${code}`,
-    /** Freund einladen: am Handy Teilen-Menü (WhatsApp …), am PC WhatsApp im Browser. 'copy' kopiert nur den Link. */
+    /** Freund einladen: am Handy Teilen-Menü (WhatsApp …), am PC WhatsApp im Browser. 'copy' kopiert nur den Link.
+        Läuft gerade eine Herausforderung aus der Freundesliste, geht die Einladung als Chat-Nachricht an den Freund
+        ('auto' schickt nur dann, sonst nichts). */
     async invite(game, code, how) {
-      const g = findGame(game), url = hub.inviteLink(game, code);
+      const g = findGame(game), url = hub.inviteLink(game, code), ch = hub.challenge;
+      if (how !== 'copy' && ch && ch.game === game && window.Social && Social.isFriend(ch.id)) {
+        try {
+          await Social.sendInvite(ch.id, `🎮 Ich fordere dich bei ${g ? g.title : 'JointVenture'} heraus! Raum-Code ${code}: ${url}`);
+          toast(`Einladung an ${ch.name} geschickt`); return 'chat';
+        } catch (e) { toast(e.message); if (how === 'auto') return 'fehler'; }
+      }
+      if (how === 'auto') return 'nichts';
       const text = `Ich fordere dich bei ${g ? g.title : 'JointVenture'} heraus! Tipp auf den Link, dann bist du direkt in meinem Raum (Code ${code}): ${url}`;
       if (how === 'copy') { try { await navigator.clipboard.writeText(url); return 'kopiert'; } catch (e) { prompt('Link kopieren:', url); return 'kopiert'; } }
       if (navigator.maxTouchPoints > 0 && navigator.share) { try { await navigator.share({ text }); return 'geteilt'; } catch (e) { return 'abgebrochen'; } }

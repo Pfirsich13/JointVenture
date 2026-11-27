@@ -141,7 +141,7 @@
     const shot = withShot && r.screenshot_path ? await shotUrl(r.screenshot_path, 7 * 24 * 3600) : null;
     const lines = [
       `## Fehlermeldung #${r.id}: ${r.title}`,
-      `- Spiel: ${r.game ? `${g ? g.title : r.game} (${r.game})` : 'Allgemein / Webseite'}`,
+      `- Spiel: ${r.game === 'chat' ? 'Chat (gemeldete Nachricht)' : r.game ? `${g ? g.title : r.game} (${r.game})` : 'Allgemein / Webseite'}`,
       `- Gemeldet von: ${r.reporter || 'unbekannt'}, ${new Date(r.created_at).toLocaleString('de-DE')}`,
       `- Status: ${rLabel(r.status)[1]}${r.admin_note ? ` · Antwort: ${r.admin_note}` : ''}`,
       `- Gerät: ${c.browser || '?'}`,
@@ -180,7 +180,7 @@
       <div class="cards">${list.length ? list.map((r) => {
         const [, lab, cls] = rLabel(r.status), c = r.context || {};
         return `<article class="panel card rep" data-id="${r.id}">
-          <div class="card-head"><div><b>#${r.id} · ${esc(r.title)}</b><small>${esc(r.game ? (games[r.game] || r.game) : 'Allgemein')} · von ${esc(r.reporter || 'unbekannt')} · ${ago(r.created_at)}</small></div><span class="pill ${cls}">${lab}</span></div>
+          <div class="card-head"><div><b>#${r.id} · ${esc(r.title)}</b><small>${esc(r.game ? (games[r.game] || (r.game === 'chat' ? 'Chat' : r.game)) : 'Allgemein')} · von ${esc(r.reporter || 'unbekannt')} · ${ago(r.created_at)}</small></div><span class="pill ${cls}">${lab}</span></div>
           <p class="rep-desc">${esc(r.description)}</p>
           ${r.screenshot_path ? '<a class="rep-shot" data-shot target="_blank" rel="noopener">Bildschirmfoto wird geladen …</a>' : ''}
           <details class="rep-tech"><summary>Technische Daten${c.fehler && c.fehler.length ? ` · ${c.fehler.length} Fehlermeldung${c.fehler.length > 1 ? 'en' : ''}` : ''}</summary>
