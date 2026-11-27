@@ -31,7 +31,7 @@
   const BUILTIN_PLAYABLE = (g) => g.kind === 'builtin' && (g.status !== 'soon');
   const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (adminOnly(g) && isAdmin()))
     && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path) || (g.kind === 'page' && PAGE_PATH.test(g.file_path || '')) || (g.kind === 'bundle' && g.file_path));
-  const ONLINE_GAMES = ['airhockey', 'arena'];            // Spiele mit Online-Räumen (Freunde herausfordern)
+  const ONLINE_GAMES = ['airhockey', 'arena', 'gladiator'];            // Spiele mit Online-Räumen (Freunde herausfordern)
   const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'], review: ['Zur Freigabe', 'review'] };
   const loadedScripts = {};
   function loadGameModule(id) {

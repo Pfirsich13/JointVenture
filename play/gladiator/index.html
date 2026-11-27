@@ -774,7 +774,8 @@ function checkRound(){
     if(oDead&&!me.dead){myWins++;banner('Runde gewonnen!')}
     else if(me.dead&&!oDead){oppWins++;banner('Runde verloren')}
     else banner('Unentschieden');
-    if(myWins>=2||oppWins>=2){matchOver=true;roundEnd=now+4.5;setTimeout(()=>banner(myWins>=2?'Sieg!':'Niederlage',2.5),1400)}
+    if(myWins>=2||oppWins>=2){if(JV)try{JV.Hub.recordResult('gladiator',mode==='online'?'online':'bot',myWins>=2,mode==='online'?$('#opName').textContent:'Bot',myWins+':'+oppWins)}catch(e){}
+      matchOver=true;roundEnd=now+4.5;setTimeout(()=>banner(myWins>=2?'Sieg!':'Niederlage',2.5),1400)}
   }
   if(roundEnd&&now>=roundEnd){
     roundEnd=0;if(matchOver){matchOver=false;myWins=0;oppWins=0;round=0;clearBlood()}
@@ -821,10 +822,24 @@ function oppJoined(pr){
   remote.m.g.visible=true;lastPr=null;newMatch();banner('Gegner da – Kampf!');
 }
 function oppLeft(){oppPeer=null;lastPr=null;remote.m.g.visible=false;started=false;roundEnd=0;clearWorld();banner('Gegner ist weg',2)}
-async function startOnline(c){
-  if(!roomNS){$('#note').textContent='Online geht hier nicht: Die Seite muss in Claude geöffnet sein und mit deinem Bruder geteilt werden. Training geht immer.';return}
+/* JointVenture: Online über die Verbindung der Seite (Handy zu Handy), wenn das Spiel dort läuft */
+const JV=(()=>{try{const P=window.parent;if(P!==window&&P.Net&&P.Hub)return{Net:P.Net,Hub:P.Hub}}catch(e){}return null})();
+async function jvConnect(c,role){
+  let last=null,ok=false;
+  const conn=await JV.Net[role==='host'?'host':'join']('gladiator',c,{
+    onMessage:m=>{if(m&&typeof m==='object'){last=m;ok=true}},
+    onStatus:st=>{if(st==='connected')ok=true;else if(st==='lost'||st==='error'){ok=false;last=null;if(st==='error')$('#status').textContent='Verbindung fehlgeschlagen. Zurück ins Menü und neu versuchen.'}}
+  });
+  return{presence(o){try{conn.send(o)}catch(e){}return Promise.resolve()},
+    peers(){return [{sameTab:true,peer:'ich'}].concat(ok&&last?[{peer:'gegner',presence:last}]:[])},
+    leave(){try{conn.close()}catch(e){}return Promise.resolve()}};
+}
+async function startOnline(c,role){
+  if(!roomNS&&!JV){$('#note').textContent='Online geht hier nicht. Spiel es auf JointVenture oder über den Claude-Link. Training geht immer.';return}
   code=c;$('#note').textContent='Verbinde …';
-  try{net=await roomNS.join('glad-'+c.toLowerCase())}catch(e){net=roomNS}
+  if(roomNS){try{net=await roomNS.join('glad-'+c.toLowerCase())}catch(e){net=roomNS}}
+  else{try{net=await jvConnect(c,role)}catch(e){$('#note').textContent='Verbindung fehlgeschlagen. Bitte noch mal versuchen.';return}
+    if(role==='host')try{JV.Hub.roomOpened('gladiator',c)}catch(e){}}
   mode='online';started=false;oppPeer=null;evq=[];evId=0;sid=Math.random().toString(36).slice(2,8);
   me.home='w'+sid;me.setClass(myClass);me.reset(-5,0,Math.PI/2);bot.m.g.visible=false;remote.m.g.visible=false;enterGame();
 }
@@ -838,7 +853,7 @@ function toMenu(){
   net=null;oppPeer=null;mode=null;started=false;roundEnd=0;clearWorld();
   bot.m.g.visible=false;remote.m.g.visible=false;me.reset(0,0,0);
   $('#menu').classList.remove('hide');$('#pad').style.display='none';$('#tools').style.display='none';$('#status').textContent='';
-  $('#note').textContent=roomNS?'Online bereit: Raum erstellen und den Code deinem Bruder sagen.':'Online ist hier nicht verfügbar. Training geht immer.';
+  $('#note').textContent=(roomNS||JV)?'Online bereit: Raum erstellen und den Code deinem Bruder sagen.':'Online ist hier nicht verfügbar. Training geht immer.';
 }
 
 /* ===== Eingabe ===== */
@@ -886,8 +901,8 @@ applySet();
 if(window.parent!==window){$('#jvBack').hidden=false;$('#jvBack').onclick=()=>{try{window.parent.postMessage({type:'jv-back'},'*')}catch(e){}}}
 $('#soloBtn').onclick=startSolo;
 const genCode=()=>Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*31)]).join('');
-$('#hostBtn').onclick=()=>startOnline(genCode());
-$('#joinBtn').onclick=()=>{const c=$('#codeIn').value.toUpperCase().replace(/[^A-Z0-9]/g,'');if(c.length!==4){$('#note').textContent='Bitte den 4-stelligen Code eingeben.';return}startOnline(c)};
+$('#hostBtn').onclick=()=>startOnline(genCode(),'host');
+$('#joinBtn').onclick=()=>{const c=$('#codeIn').value.toUpperCase().replace(/[^A-Z0-9]/g,'');if(c.length!==4){$('#note').textContent='Bitte den 4-stelligen Code eingeben.';return}startOnline(c,'join')};
 $('#codeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('#joinBtn').click()});
 $('#menuBtn2').onclick=toMenu;
 $('#fsBtn').onclick=()=>{try{const d=document.documentElement;(document.fullscreenElement?document.exitFullscreen():(d.requestFullscreen||d.webkitRequestFullscreen).call(d))?.catch?.(()=>{})}catch(e){}};
@@ -947,7 +962,11 @@ window.__glad={me,bot,items,get mode(){return mode},deliver,drops,stains};
 /* ===== Online-Verbindung prüfen ===== */
 (async()=>{
   try{if(window.claude&&typeof window.claude.use==='function')roomNS=await window.claude.use('room')}catch(e){roomNS=null}
-  if(!mode)$('#note').textContent=roomNS?'Online bereit: Raum erstellen und den Code deinem Bruder sagen.':'Online ist hier nicht verfügbar. Training geht immer.';
+  if(!mode)$('#note').textContent=(roomNS||JV)?'Online bereit: Raum erstellen und den Code deinem Bruder sagen.':'Online ist hier nicht verfügbar. Training geht immer.';
+  if(JV&&SET.name==='Du')try{const n=JV.Hub.getName();if(n&&n!=='Spieler'){SET.name=n;applySet()}}catch(e){}
+  // Einladungs-Link (…#gladiator/CODE): direkt beitreten
+  const j=(new URLSearchParams(location.search).get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(j.length===4&&!mode)startOnline(j,'join');
 })();
 }
 </script>
