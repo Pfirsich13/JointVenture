@@ -96,6 +96,28 @@
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw new Error(deErr(error));
     },
+    /** Fehlermeldung senden (mit optionalem Bildschirmfoto) */
+    async report({ game, title, description, context, shot }) {
+      need();
+      if (!user) throw new Error('Bitte melde dich zuerst an.');
+      let screenshot_path = null;
+      if (shot) {
+        const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[shot.type] || 'png';
+        screenshot_path = `${user.id}/${Date.now()}.${ext}`;
+        const { error } = await client.storage.from('reports').upload(screenshot_path, shot, { contentType: shot.type });
+        if (error) throw new Error('Das Bildschirmfoto ging nicht hoch: ' + deErr(error));
+      }
+      const { error } = await client.from('reports').insert({ user_id: user.id, game: game || null, title, description, context, screenshot_path });
+      if (error) throw new Error(deErr(error));
+    },
+    /** Die eigenen Meldungen mit Status und Antwort */
+    async myReports() {
+      if (!client || !user) return [];
+      const { data, error } = await client.from('reports').select('id,title,status,admin_note,created_at')
+        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(10);
+      if (error) { console.warn(error); return []; }
+      return data || [];
+    },
     async signOut() { if (client) await client.auth.signOut(); },
     async saveResult(r) {
       if (!client || !user) return false;

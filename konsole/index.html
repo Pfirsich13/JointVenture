@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>JointVenture Admin</title>
+<meta name="theme-color" content="#0d0e12">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="admin-192.png">
+<link rel="apple-touch-icon" href="admin-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css?v=202611271207">
+</head>
+<body class="app">
+<header class="app-top">
+  <div class="app-top-in">
+    <span class="app-brand"><img src="admin-192.png" alt="" width="30" height="30"><b>JointVenture Admin</b></span>
+    <span class="app-who" id="who"></span>
+    <div class="app-actions">
+      <button class="btn" type="button" id="installBtn" hidden>Als Programm installieren</button>
+      <button class="btn" type="button" id="notifBtn" hidden>Benachrichtigungen an</button>
+      <a class="btn" href="../" target="_blank" rel="noopener">Seite öffnen</a>
+      <button class="btn" type="button" id="logoutBtn" hidden>Abmelden</button>
+    </div>
+  </div>
+</header>
+<div class="wrap"><details class="app-install" id="installHelp" hidden>
+  <summary>So installierst du das Admin-Programm auf deinem PC</summary>
+  <ol>
+    <li>Öffne diese Seite in <b>Microsoft Edge</b> oder <b>Google Chrome</b> (Opera und Firefox können das nicht).</li>
+    <li><b>Edge:</b> oben rechts auf „…“ → <b>Apps</b> → <b>Diese Website als App installieren</b> → <b>Installieren</b>.<br>
+        <b>Chrome:</b> rechts in der Adressleiste auf das Symbol mit dem Bildschirm und Pfeil → <b>Installieren</b>.</li>
+    <li>Danach gibt es „JointVenture Admin“ im Startmenü. Rechtsklick auf das Symbol in der Taskleiste → <b>An Taskleiste anheften</b>.</li>
+  </ol>
+</details></div>
+<main class="wrap app-main" id="app"><p class="empty">Lädt …</p></main>
+
+<script src="../js/errors.js?v=202611271207"></script>
+<script src="../js/config.js?v=202611271207"></script>
+<script src="../js/auth.js?v=202611271207"></script>
+<script src="../js/content.js?v=202611271207"></script>
+<script src="../js/admin.js?v=202611271207"></script>
+<script src="../js/console.js?v=202611271207"></script>
+<script src="app.js?v=202611271207"></script>
+</body>
+</html>

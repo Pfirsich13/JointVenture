@@ -71,7 +71,8 @@
       }
     },
     statsFor(game) { return store.stats[game] || {}; },
-    back() { if (location.hash) history.replaceState(null, '', location.pathname + location.search); route(); }
+    back() { if (location.hash) history.replaceState(null, '', location.pathname + location.search); route(); },
+    report(gameId) { openReport(gameId); }                 // Spiele können so „Fehler melden“ öffnen
   };
   window.Hub = hub;
 
@@ -175,6 +176,8 @@
     const u = window.Auth && Auth.user();
     $('#acctTxt').textContent = u ? hub.getName() : (window.Auth && Auth.ready ? 'Anmelden' : hub.getName());
     $('#acctAv').textContent = (hub.getName()[0] || '?').toUpperCase();
+    $('#acctBtn').classList.toggle('in', !!u);
+    $('#acctBtn').setAttribute('aria-label', u ? 'Konto: ' + hub.getName() : 'Anmelden');
   }
   function renderAll() { renderAccount(); renderStand(); }
   async function refreshCloud() {
@@ -230,6 +233,69 @@
     });
     setTimeout(() => f.elements.email.focus(), 50);
   }
+  /* ---------- Fehler melden ---------- */
+  const REPORT_STATUS = { neu: ['Neu', ''], in_arbeit: ['In Arbeit', 'beta'], erledigt: ['Erledigt', 'ok'], abgelehnt: ['Kein Fehler', 'off'] };
+  function reportContext() {
+    const src = (document.querySelector('script[src*="hub.js"]') || {}).src || '';
+    return {
+      seite: location.href.split('?')[0], spiel_offen: current ? current.id : null,
+      version: (src.match(/[?&]v=(\d+)/) || [])[1] || null,
+      browser: navigator.userAgent, sprache: navigator.language,
+      bildschirm: `${screen.width}x${screen.height}`, fenster: `${innerWidth}x${innerHeight}`, pixel: devicePixelRatio,
+      touch: navigator.maxTouchPoints > 0, online: navigator.onLine, zeit: new Date().toString(),
+      fehler: (window.JV_ERRORS || []).slice(-10)
+    };
+  }
+  function openReport(gameId) {
+    if (document.querySelector('.sheet')) return;
+    if (!window.Auth || !Auth.ready) {
+      sheet('<h3>Fehler melden</h3><p>Melden geht gerade nicht, weil keine Verbindung zum Server besteht. Versuch es bitte später nochmal.</p><div class="row"><button class="btn" type="button" data-close>Schließen</button></div>');
+      return;
+    }
+    if (!Auth.user()) {
+      const el = sheet('<h3>Fehler melden</h3><p>Danke, dass du helfen willst! Zum Melden musst du angemeldet sein, damit wir bei Rückfragen wissen, wer es war.</p><div class="row"><button class="btn" type="button" data-close>Abbrechen</button><button class="btn primary" type="button" data-login>Anmelden</button></div>');
+      el.querySelector('[data-login]').onclick = () => { el.remove(); openAccount(); };
+      return;
+    }
+    const games = visibleGames().filter((g) => g.status !== 'soon');
+    const pre = gameId || (current && current.id) || '';
+    const el = sheet(`<h3>Fehler melden</h3><p>Beschreib kurz, was nicht geklappt hat. Wir kümmern uns darum.</p>
+      <form class="report" novalidate>
+        <select class="field" name="game" aria-label="Wo ist der Fehler?"><option value="">Allgemein / Webseite</option>${games.map((g) => `<option value="${esc(g.id)}" ${g.id === pre ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select>
+        <input class="field" name="title" maxlength="120" placeholder="Was ist kaputt? (kurz)" aria-label="Kurze Überschrift">
+        <textarea class="field" name="description" maxlength="4000" rows="5" placeholder="Was hast du gemacht? Was ist passiert? Was hättest du erwartet?" aria-label="Beschreibung"></textarea>
+        <label class="filebox"><span>Bildschirmfoto (optional)</span><input type="file" name="shot" accept="image/png,image/jpeg,image/webp"></label>
+        <p class="hint">Gerät, Browser und die letzten technischen Fehlermeldungen werden automatisch mitgeschickt.</p>
+        <p class="msg" aria-live="polite"></p>
+        <div class="row"><button class="btn" type="button" data-close>Abbrechen</button><button class="btn primary" type="submit">Senden</button></div>
+      </form>
+      <details class="myreports"><summary>Deine Meldungen</summary><div class="mr-list"><p class="empty">Lädt …</p></div></details>`);
+    el.querySelector('.box').classList.add('wide');
+    const f = el.querySelector('form'), msg = el.querySelector('.msg'), submit = f.querySelector('[type=submit]');
+    const ctx = reportContext();                            // Stand beim Öffnen (vor eventuellen neuen Fehlern beim Tippen)
+    el.querySelector('.myreports').addEventListener('toggle', async (e) => {
+      if (!e.target.open) return;
+      const list = await Auth.myReports(), box = el.querySelector('.mr-list');
+      box.innerHTML = list.length ? list.map((r) => {
+        const [lab, cls] = REPORT_STATUS[r.status] || REPORT_STATUS.neu;
+        return `<div class="mr"><div><b>${esc(r.title)}</b><small>${ago(Date.parse(r.created_at))}</small></div><span class="pill ${cls}">${lab}</span>${r.admin_note ? `<p class="mr-note">Antwort: ${esc(r.admin_note)}</p>` : ''}</div>`;
+      }).join('') : '<p class="empty">Du hast noch nichts gemeldet.</p>';
+    });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); msg.className = 'msg'; msg.textContent = '';
+      const title = f.elements.title.value.trim(), description = f.elements.description.value.trim(), shot = f.elements.shot.files[0];
+      if (title.length < 3) { msg.textContent = 'Bitte gib eine kurze Überschrift ein (mindestens 3 Zeichen).'; f.elements.title.focus(); return; }
+      if (!description) { msg.textContent = 'Bitte beschreib kurz, was passiert ist.'; f.elements.description.focus(); return; }
+      if (shot && (!/^image\/(png|jpeg|webp)$/.test(shot.type) || shot.size > 5 * 1024 * 1024)) { msg.textContent = 'Bildschirmfoto bitte als PNG, JPG oder WebP, höchstens 5 MB.'; return; }
+      submit.disabled = true; submit.textContent = 'Sendet …';
+      try {
+        await Auth.report({ game: f.elements.game.value, title, description, context: ctx, shot });
+        el.querySelector('.box').innerHTML = '<h3>Danke!</h3><p>Deine Meldung ist angekommen. Unter „Fehler melden“ → „Deine Meldungen“ siehst du, wenn wir sie bearbeitet haben.</p><div class="row"><button class="btn primary" type="button" data-close>Schließen</button></div>';
+      } catch (err) { msg.textContent = err.message; submit.disabled = false; submit.textContent = 'Senden'; }
+    });
+    setTimeout(() => f.elements.title.focus(), 50);
+  }
+
   function askName(first) {
     const el = sheet(`<h3>${first ? 'Wie heißt du?' : 'Dein Name'}</h3><p>So sieht dich dein Gegner im Spiel.</p>
       <form><input class="field" name="n" maxlength="16" autocomplete="nickname" placeholder="Dein Name">
@@ -286,7 +352,7 @@
     function loop(t) { if (!on) return; raf = requestAnimationFrame(loop); const dt = Math.min(0.033, (t - last) / 1000 || 0.016); last = t; step(dt); draw(); }
     function pause() { on = false; cancelAnimationFrame(raf); }
     function resume() { if (reduced) { draw(); return; } if (on) return; on = true; last = performance.now(); raf = requestAnimationFrame(loop); }
-    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting && !$('#hub').hidden) resume(); else pause(); });
+    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting && !inGame()) resume(); else pause(); });
     io.observe(cv);
     addEventListener('resize', () => { if (!on) draw(); });
     return { pause, resume };
@@ -315,7 +381,9 @@
       const ph = new URLSearchParams(location.search).get('peerhost');      // nur für Tests
       if (ph) q.set('peerhost', ph);
       el.innerHTML = `<iframe class="upframe" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock" allowfullscreen src="${esc(g.file_path)}?${q}"></iframe>`;
-      el.querySelector('iframe').focus();
+      const frame = el.querySelector('iframe');
+      frame.addEventListener('load', () => { try { window.JV_WATCH(frame.contentWindow, g.title); } catch (e) { /* fremde Seite */ } });
+      frame.focus();
     },
     stop() { }
   };
@@ -325,12 +393,20 @@
   });
 
   /* ---------- Umschalten: Startseite, Spiel, Admin ---------- */
+  // Im Spiel bleibt am PC die Kopfzeile sichtbar (das Spiel beginnt darunter), am Handy gibt es Vollbild.
+  const SECTIONS = ['spiele', 'stand', 'arbeit'];
+  const inGame = () => document.body.classList.contains('in-game');
+  function setInGame(on) {
+    document.body.classList.toggle('in-game', on);
+    document.documentElement.style.setProperty('--top-h', $('.top').getBoundingClientRect().height + 'px');
+  }
+  addEventListener('resize', () => { if (inGame()) setInGame(true); });
   let current = null;
   function route() {
     const id = location.hash.slice(1);
     if (id === 'admin') {
       if (current) { try { current.stop(); } catch (e) { } current = null; $('#game').innerHTML = ''; }
-      $('#game').hidden = true; $('#hub').hidden = false; demo.pause();
+      $('#game').hidden = true; setInGame(false); demo.pause();
       if (isAdmin() && window.Admin) {
         $('#mainView').hidden = true; $('#maint').hidden = true; $('#adminView').hidden = false;
         Admin.render($('#adminView'), { refresh: () => Content.load(), toast });
@@ -346,7 +422,7 @@
     const can = g && playable(g);
     if (current && (!can || current.id !== id)) { try { current.mod.stop(); } catch (e) { console.error(e); } current = null; $('#game').innerHTML = ''; }
     if (can) {
-      $('#hub').hidden = true; $('#game').hidden = false; demo.pause();
+      setInGame(true); $('#game').hidden = false; demo.pause();
       if (!current) {
         const token = current = { id, mod: { stop() { } } };
         const player = g.kind === 'page' ? pagePlayer : uploadPlayer;
@@ -362,7 +438,8 @@
         });
       }
     } else {
-      $('#game').hidden = true; $('#hub').hidden = false; renderAll(); applyContent(); demo.resume();
+      $('#game').hidden = true; setInGame(false); renderAll(); applyContent(); demo.resume();
+      if (SECTIONS.includes(id)) requestAnimationFrame(() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ block: 'start' }); });
     }
   }
   function open(id, intent) { hub.intent = intent || null; location.hash = id; }
@@ -381,16 +458,26 @@
     const g = findGame(t.dataset.id);
     if (playable(g)) open(g.id); else toast(`${g ? g.title : 'Das Spiel'} ist noch in Arbeit.`);
   });
+  $('#reportBtn').onclick = () => openReport();
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-report]')) openReport(e.target.closest('[data-report]').dataset.report || ''); });
   $('#playMain').onclick = () => open('airhockey');
   $('#featureCard').onclick = () => open('airhockey');
   $('#playBot').onclick = () => open('airhockey', 'bot');
   $('#acctBtn').onclick = openAccount;
   $('#standBox').addEventListener('click', (e) => { if (e.target.closest('[data-login]')) openAccount(); });
-  // Bereichs-Links nur scrollen, ohne die Adresse zu ändern (die Adresse steuert die Spiele)
-  document.querySelectorAll('.links a').forEach((a) => a.addEventListener('click', (e) => {
-    e.preventDefault(); const t = document.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
-  }));
-  $('.brand').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' }); });
+  // Links oben (Spiele, Spielstände, In Arbeit, Logo): aus dem Admin-Bereich oder einem Spiel
+  // erst zurück zur Startseite, dann zum Bereich scrollen. Die Adresse bleibt sauber (sie steuert die Spiele).
+  function goSection(sel) {
+    const leaving = !!location.hash;
+    if (leaving) { history.pushState(null, '', location.pathname + location.search); route(); }
+    const behavior = leaving || reduced ? 'auto' : 'smooth';
+    requestAnimationFrame(() => {
+      const t = sel && document.querySelector(sel);
+      if (t) t.scrollIntoView({ behavior }); else scrollTo({ top: 0, behavior });
+    });
+  }
+  document.querySelectorAll('.links a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); goSection(a.getAttribute('href')); }));
+  $('.brand').addEventListener('click', (e) => { e.preventDefault(); goSection(null); });
   addEventListener('hashchange', route);
   Content.onChange(() => { renderContent(); if (location.hash === '#admin' && !isAdmin()) route(); });
   if (window.Auth) {

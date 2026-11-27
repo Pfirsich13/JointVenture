@@ -1,5 +1,5 @@
 /* =========================================================================
-   Air-Hockey – Duellhalle
+   Air-Hockey – JointVenture
    -------------------------------------------------------------------------
    Modi: online (2 Handys), gegen Bot, zu zweit auf einem Handy.
    Koordinaten: Tisch ist W x H Einheiten. "b" = unten (Gastgeber),
@@ -620,7 +620,7 @@
           <button class="btn blue" data-a="host">Online: Raum erstellen</button>
           <button class="btn" data-a="join">Online: Mit Code beitreten</button>
           <div class="row"><button class="btn" data-a="bot">Gegen Bot</button><button class="btn" data-a="local">Zu zweit, 1 Handy</button></div>
-          <button class="btn main" data-a="back">Zurück zur Halle</button>
+          <button class="btn main" data-a="back">Zurück zur Übersicht</button>
         </div>${e}<p class="hint">Online verbinden sich eure Handys direkt. Beide brauchen Internet.</p></div>`;
     } else if (state === 'host') {
       p.innerHTML = `<div class="box"><h2>Dein Raum</h2><p>Sag diesen Code deinem Gegner:</p>

@@ -17,4 +17,9 @@ Unsere private PvP-Spieleseite (JointVenture): Startseite mit Spielekacheln, Ech
 | `js/net.js` | Echtzeit-Verbindung (Peer-to-Peer über PeerJS, oder Claude-Raum) |
 | `js/hub.js` | Kacheln, Filter, Duell-Bilanz – neue Spiele hier eintragen |
 | `js/games/airhockey.js` | Air-Hockey (Werte ganz oben im Code) |
+| `js/errors.js` | Merkt sich die letzten Fehlermeldungen im Browser (gehen bei „Fehler melden“ mit) |
+| `js/console.js` | Konsole im Admin-Bereich (Befehle wie `meldungen`, `claude offen`, `spiel arena beta`) |
+| `konsole/` | Admin-Programm zum Installieren (Edge oder Chrome), mit Hinweis bei neuen Meldungen |
+| `play/arena/` | Arena-Spiel des Bruders (fertiger Build), Anleitung in `quellen/arena/` |
+| `tools/version.sh` | Vor jedem Hochladen ausführen: neue Versionsnummer an CSS und JavaScript |
 | `MASTERPROMPT.md` | Bauplan und Regeln fürs Projekt |
