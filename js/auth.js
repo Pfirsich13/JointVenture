@@ -59,6 +59,9 @@
     if (/Password should be/i.test(m)) return 'Das Passwort muss mindestens 6 Zeichen haben.';
     if (/Email not confirmed/i.test(m)) return 'Bitte bestätige zuerst deine E-Mail (Link im Postfach).';
     if (/valid email|invalid.*email/i.test(m)) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
+    if (/signups? (are|is) disabled|signup.*not allowed/i.test(m)) return 'Registrieren ist bei Supabase gerade ausgeschaltet (Authentication → Sign In / Providers).';
+    if (/rate limit|too many/i.test(m)) return 'Zu viele Versuche. Bitte kurz warten und nochmal probieren.';
+    if (/fetch|network/i.test(m)) return 'Keine Verbindung. Internet prüfen und nochmal versuchen.';
     return m || 'Das hat nicht geklappt.';
   };
 
