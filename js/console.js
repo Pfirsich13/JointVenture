@@ -103,11 +103,69 @@
         await setSetting('maintenance', { on: mode === 'an', text: (text || 'Wir bauen gerade um. Gleich geht es weiter.').slice(0, 160) });
         ok(mode === 'an' ? 'Wartungsmodus ist an. Nur Admins sehen die Spiele.' : 'Wartungsmodus ist aus.');
       }],
-      spieler: ['', 'alle Spieler mit Rolle', async () => {
-        const { data, error } = await api.db().from('profiles').select('name,role,created_at').order('created_at');
+      spieler: ['', 'alle Spieler mit Rolle und Status', async () => {
+        const { data, error } = await api.db().from('profiles').select('id,name,role,created_at,last_seen_at').order('created_at');
         if (error) throw error;
-        print(pad('Name', 20) + pad('Rolle', 10) + 'Dabei seit', 'head');
-        data.forEach((p) => print(pad(p.name, 20) + pad(p.role === 'admin' ? 'Admin' : 'Spieler', 10) + new Date(p.created_at).toLocaleDateString('de-DE')));
+        if (window.Social) data.forEach((p) => { Social.state.profiles[p.id] = Object.assign(Social.state.profiles[p.id] || {}, p); });
+        print(pad('Name', 20) + pad('Rolle', 10) + pad('Dabei seit', 13) + 'Status', 'head');
+        data.forEach((p) => print(pad(p.name, 20) + pad(p.role === 'admin' ? 'Admin' : 'Spieler', 10) + pad(new Date(p.created_at).toLocaleDateString('de-DE'), 13) + (window.Social ? Social.statusLabel(p.id) : '')));
+      }],
+      online: ['', 'wer gerade online oder abwesend ist', async () => {
+        if (!window.Social) return err('Der Online-Status ist hier nicht verfügbar.');
+        const { data, error } = await api.db().from('profiles').select('id,name').order('name');
+        if (error) throw error;
+        const list = data.filter((p) => ['online', 'abwesend'].includes(Social.statusOf(p.id)));
+        if (!list.length) return ok('Gerade ist niemand online.');
+        list.forEach((p) => print(pad(p.name, 20) + Social.statusLabel(p.id)));
+        dim(`${list.length} von ${data.length} Spielern. Unsichtbare erscheinen offline.`);
+      }],
+      freunde: ['[name]', 'deine Freunde; mit Name: Freundschaftsanfrage schicken', async (args) => {
+        const db = api.db(), me = Auth.user().id, name = args.join(' ').trim();
+        const { data: fr, error } = await db.from('friendships').select('id,requester,addressee,status');
+        if (error) throw error;
+        const other = (f) => (f.requester === me ? f.addressee : f.requester);
+        if (name) {
+          const p = await findPlayer(name);
+          if (p.id === me) return err('Mit dir selbst kannst du dich nicht befreunden.');
+          const f = fr.find((x) => other(x) === p.id);
+          if (f && f.status === 'accepted') return ok(`${p.name} ist schon dein Freund.`);
+          if (f && f.addressee === me) {
+            const { error: e2 } = await db.from('friendships').update({ status: 'accepted' }).eq('id', f.id); if (e2) throw e2;
+            if (window.Social) Social.reload(); return ok(`Anfrage von ${p.name} angenommen. Ihr seid jetzt Freunde.`);
+          }
+          if (f) return ok(`Du hast ${p.name} schon eine Anfrage geschickt.`);
+          const { error: e3 } = await db.from('friendships').insert({ addressee: p.id });
+          if (e3) throw new Error(/row-level/i.test(e3.message) ? 'Das geht nicht (blockiert).' : e3.message);
+          if (window.Social) Social.reload(); return ok(`Freundschaftsanfrage an ${p.name} geschickt.`);
+        }
+        if (!fr.length) return ok('Noch keine Freunde. „freunde <name>“ schickt eine Anfrage.');
+        const { data: ps } = await db.from('profiles').select('id,name,last_seen_at').in('id', fr.map(other));
+        const nm = {}; (ps || []).forEach((p) => { nm[p.id] = p.name; if (window.Social) Social.state.profiles[p.id] = Object.assign(Social.state.profiles[p.id] || {}, p); });
+        print(pad('Name', 20) + 'Status', 'head');
+        fr.forEach((f) => print(pad(nm[other(f)] || 'Spieler', 20) + (f.status === 'accepted' ? (window.Social ? Social.statusLabel(other(f)) : 'Freund') : f.addressee === me ? 'möchte dein Freund sein („freunde <name>“ nimmt an)' : 'Anfrage gesendet')));
+      }],
+      lobby: ['[leeren]', 'letzte Lobby-Nachrichten; „lobby leeren“ löscht alle', async (args) => {
+        const db = api.db();
+        if ((args[0] || '').toLowerCase() === 'leeren') {
+          if (!confirm('Wirklich alle Nachrichten in der Lobby löschen? Das lässt sich nicht rückgängig machen.')) return dim('Abgebrochen.');
+          const { error, count } = await db.from('lobby_messages').delete({ count: 'exact' }).gte('id', 0);
+          if (error) throw error; return ok(`Lobby geleert (${count ?? 'alle'} Nachrichten gelöscht).`);
+        }
+        const { data, error } = await db.from('lobby_messages').select('id,sender_name,body,created_at').order('created_at', { ascending: false }).limit(15);
+        if (error) throw error;
+        if (!data.length) return ok('Die Lobby ist leer.');
+        data.reverse().forEach((m) => print(pad(new Date(m.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), 7) + pad(m.sender_name || 'Spieler', 14) + m.body.replace(/\s+/g, ' ')));
+        dim('Löschen und Stummschalten geht auch im Chat-Fenster: Nachricht antippen.');
+      }],
+      stumm: ['<name> [minuten]', 'Spieler im Lobby-Chat stummschalten (0 hebt auf)', async (args) => {
+        let min = 60;
+        if (args.length > 1 && /^\d+$/.test(args[args.length - 1])) min = Number(args.pop());
+        const name = args.join(' ').trim();
+        if (!name) return err('So geht es: „stumm Max 30“ (Minuten) oder „stumm Max 0“ zum Aufheben.');
+        const p = await findPlayer(name);
+        const { error } = await api.db().rpc('set_chat_mute', { target: p.id, minutes: Math.min(min, 525600) });
+        if (error) throw error;
+        ok(min ? `${p.name} kann ${min} Minuten nicht in der Lobby schreiben.` : `${p.name} darf wieder in der Lobby schreiben.`);
       }],
       rolle: ['<name> <admin|spieler>', 'Admin-Rechte geben oder nehmen', async (args) => {
         const role = (args[args.length - 1] || '').toLowerCase(), name = args.slice(0, -1).join(' ').trim();
@@ -162,7 +220,7 @@
       }],
       leeren: ['', 'Konsole leeren', async () => { out.innerHTML = ''; }]
     };
-    const ALIAS = { help: 'hilfe', '?': 'hilfe', clear: 'leeren', cls: 'leeren', reports: 'meldungen', report: 'meldung', games: 'spiele', players: 'spieler', stats: 'statistik', 'ankündigung': 'ankuendigung', projects: 'projekte' };
+    const ALIAS = { friends: 'freunde', mute: 'stumm', help: 'hilfe', '?': 'hilfe', clear: 'leeren', cls: 'leeren', reports: 'meldungen', report: 'meldung', games: 'spiele', players: 'spieler', stats: 'statistik', 'ankündigung': 'ankuendigung', projects: 'projekte' };
 
     async function run(line) {
       const parts = line.trim().split(/\s+/); if (!parts[0]) return;

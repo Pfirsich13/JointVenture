@@ -9,6 +9,7 @@ Damit es auf der JointVenture-Seite ohne gemieteten Server läuft, gibt es eine 
 - Der Mitspieler verbindet sich per Raum-Code direkt mit dem Gastgeber (WebRTC über PeerJS, `client/src/net/browser/P2P.ts`).
 - Knopf „Freund einladen“ (WhatsApp-Link, der direkt in den Raum führt) und Beitreten über `?join=1234` bzw. den Rahmen-Namen `jv:join=1234` (`params.ts`).
 - Eingebettet in die Seite zeigt der Startbildschirm „← Zurück zur Spieleauswahl“.
+- Eingebettet in JointVenture übernimmt die Seite das Einladen (`window.parent.Hub.invite`). Kommt die Herausforderung aus der Freundesliste, geht die Einladung automatisch als Chat-Nachricht an den Freund (`roomOpened` in `invite.ts`, aufgerufen in `Hud.ts`).
 - `npm run dev` und `Spiel starten.bat` laufen wie vorher mit dem echten Server. Der Online-Modus ohne Server ist nur im Build für JointVenture aktiv (`client/.env.jointventure`).
 
 ## Einmal: Anpassung ins Projekt übernehmen

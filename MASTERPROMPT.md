@@ -18,8 +18,7 @@ Eine kleine, private Spieleseite nur für zwei Brüder. Man öffnet die Seite, s
   1. **Peer-to-Peer (WebRTC über PeerJS):** Handy zu Handy direkt, kleinste Verzögerung, kein eigener Server
   2. **Claude-Raum:** wenn die Seite als Claude-Artifact läuft
   Spiele sprechen nur mit `net.js` und wissen nicht, welcher Weg genutzt wird.
-- **Später:** Supabase für Konten, „Wer ist online“ und eine gemeinsame Statistik. Bis dahin wird die Statistik lokal auf dem Gerät gespeichert.
-- **Anmeldung (Ziel):** Falls möglich, kommt irgendwann eine Anmeldung dazu, mit der Daten und Spielstände gespeichert werden.
+- **Konten und Daten:** Supabase (Projekt `gekavukdzlhnhgpjyyyd`): Anmeldung, Spielstände, Rangliste, Fehlermeldungen, Freunde, Chat und Online-Status. RLS ist überall an. Ohne Anmeldung wird die Statistik nur auf dem Gerät gespeichert.
 
 ## Netcode-Regeln (das Herzstück)
 - Jeder sendet ca. 30-mal pro Sekunde seinen **kompletten Zustand** (keine Einzelschritte). So repariert sich jede verlorene Nachricht von selbst.
@@ -78,6 +77,16 @@ Admin-Panel → Spiele → „Neues Spiel oder Beta-Version hochladen“. Das Sp
 **Fehlermeldungen von Spielern:** Spieler melden über „Fehler melden“ (Tabelle `public.reports`, Bildschirmfotos im privaten Speicher `reports`). Der Admin kopiert sie mit „Für Claude kopieren“ (oder in der Konsole `claude offen`) in den Chat. Nach dem Fix: `update public.reports set status = 'erledigt', admin_note = 'Kurze Antwort an den Spieler', updated_at = now() where id = <nr>;` Die Antwort sieht der Spieler bei „Deine Meldungen“.
 
 **Rangliste, Profil, Einladen:** Rangliste über die Datenbank-Funktion `public.leaderboard(p_game)` (nur Online-Duelle, nur für Angemeldete). Profilbilder im öffentlichen Speicher `avatars` (`<user-id>/avatar-<zeit>.webp`, Spalte `profiles.avatar_path`). Einladungs-Links haben die Form `…/#<spiel>/<CODE>`; `hub.intent.join` enthält dann den Code, Spiele treten damit direkt bei (Air-Hockey: `startJoin`, Arena: `?join=` im Rahmen). `hub.invite(spiel, code)` teilt per WhatsApp.
+
+**Passwort ändern und vergessen:** Im Profil „Passwort ändern“ (`Auth.setPassword`). „Passwort vergessen?“ im Anmeldefenster legt eine Anfrage in `public.password_requests` an (auch ohne Anmeldung, höchstens 3 pro E-Mail und Stunde; die Antwort ist immer gleich). Admins sehen sie unter Admin → Spieler und erstellen über die Edge Function `admin-reset-password` ein Einmal-Passwort (drei Wörter und eine Zahl). Es wird nirgends gespeichert und nur einmal angezeigt. `profiles.must_change_password` zwingt beim nächsten Anmelden zu einem neuen Passwort. Admins sehen nie das alte Passwort.
+
+**Freunde, Chat, Online-Status (`js/social.js`):**
+- Tabellen `friendships` (ein Eintrag pro Paar, `pending`/`accepted`) und `blocks`. Nur die beiden Beteiligten sehen sie. Spielersuche über die RPC `search_players` (nur id, Name, Bild).
+- `messages` (Privat-Chat, nur an angenommene Freunde, nicht an Blockierte; höchstens 30 pro Minute) und `lobby_messages` (für alle Angemeldeten, höchstens 10 pro Minute). Live über Supabase Realtime (`postgres_changes`). Nachrichten älter als 90 Tage löscht ein Trigger.
+- Admins sehen Privat-Chats nicht. Gemeldete Nachrichten landen als Fehlermeldung mit Spiel `chat` in `reports`. Lobby: Admins löschen Nachrichten und schalten mit `set_chat_mute(target, minutes)` stumm.
+- Herausfordern: `Hub.startChallenge(freund, spiel)` öffnet das Spiel. Meldet das Spiel `hub.roomOpened(spiel, code)` (Air-Hockey in `startHost`, Arena über `invite.ts`), geht die Einladung automatisch als Chat-Nachricht raus. `hub.invite` schickt sie bei einer Herausforderung ebenfalls in den Chat.
+- Online-Status: Realtime Presence auf dem Kanal `online` (`{ user_id, status }`, online/abwesend). `profiles.last_seen_at` wird etwa jede Minute gesetzt, `profiles.presence_mode` ist `auto` oder `invisible`. Jedes Profilbild `<span class="av" data-uid="<user-id>">` bekommt den Punkt automatisch. Neue Stellen mit Profilbildern brauchen also nur `data-uid`.
+- Backup: Admin-Knopf und Wochen-Backup sichern auch `password_requests`, `friendships`, `blocks` und `lobby_messages`. **Privat-Nachrichten (`messages`) kommen nie ins Backup.**
 
 **Vor jedem Hochladen:** `tools/version.sh` ausführen. Es hängt an CSS und JavaScript in `index.html` eine neue Versionsnummer, damit Browser und GitHub-Zwischenspeicher sofort die neuen Dateien laden.
 

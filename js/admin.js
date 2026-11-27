@@ -673,9 +673,10 @@
     const out = {
       app: 'JointVenture', format: 1, erstellt: now(), von: Auth.name() || '',
       hinweis: 'Backup der Seite https://pfirsich13.github.io/JointVenture/ . Zum Wiederherstellen diese Datei an Claude geben. Der Code der Seite liegt auf GitHub (Pfirsich13/JointVenture).',
+      datenschutz: 'Privat-Nachrichten (Tabelle messages) sind absichtlich nicht im Backup.',
       tabellen: {}, dateien: {}
     };
-    for (const t of ['site_settings', 'games', 'projects', 'profiles', 'results', 'reports']) {
+    for (const t of ['site_settings', 'games', 'projects', 'profiles', 'results', 'reports', 'password_requests', 'lobby_messages']) {
       step(`Lese ${t} …`);
       const rows = [];
       for (let from = 0; ; from += 1000) {                  // in Blöcken, damit nichts abgeschnitten wird
@@ -685,6 +686,10 @@
       }
       out.tabellen[t] = rows;
     }
+    step('Lese Freundschaften …');                          // über eine Admin-Funktion, weil sonst jeder nur seine eigenen sieht
+    const { data: soc, error: es } = await db().rpc('backup_social');
+    if (es) throw es;
+    out.tabellen.friendships = (soc && soc.friendships) || []; out.tabellen.blocks = (soc && soc.blocks) || [];
     const bucket = db().storage.from('games');
     const paths = await listAll('');
     for (const path of paths) {
@@ -727,7 +732,7 @@
     const dir = canPickFolder ? await savedFolder() : null;
     body.innerHTML = `
       <div class="panel form"><h3>Backup</h3>
-        <p class="hint">Sichert alle Texte, Spiele (auch hochgeladene Spieldateien und Titelbilder), Projekte, Spieler, Ergebnisse und Fehlermeldungen in einer Datei. Der Code der Seite liegt zusätzlich auf GitHub.</p>
+        <p class="hint">Sichert alle Texte, Spiele (auch hochgeladene Spieldateien und Titelbilder), Projekte, Spieler, Ergebnisse, Fehlermeldungen, Passwort-Anfragen, Freundschaften und den Lobby-Chat in einer Datei. Privat-Nachrichten kommen absichtlich nicht ins Backup. Der Code der Seite liegt zusätzlich auf GitHub.</p>
         <p class="bk-last">${last && last.at ? `Letztes Backup <b>${ago(last.at)}</b>${last.by ? ' von ' + esc(last.by) : ''} · ${mb(last.bytes || 0)}${last.ziel ? ' · ' + esc(last.ziel) : ''}` : 'Noch kein Backup gemacht.'}</p>
         ${canPickFolder ? `
           <p class="hint">Ordner auf diesem Gerät: <b id="bkDir">${dir ? esc(dir.name) : 'noch keiner gewählt'}</b></p>
