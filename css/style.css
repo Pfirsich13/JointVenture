@@ -485,3 +485,20 @@ body.in-game #mainView,body.in-game #adminView,body.in-game #maint,body.in-game 
 .so-join{color:#9fc0ff;font-weight:600}
 .msg-row.mine .so-join{color:#fff}
 .so-lobbyinfo{font-size:12.5px;margin:2px 0 6px}
+/* Online-Status: Punkt unten rechts am Profilbild */
+.av{position:relative;overflow:visible}
+.av img{border-radius:50%}
+.av>.dot{position:absolute;right:-2px;bottom:-2px;width:34%;height:34%;min-width:10px;min-height:10px;max-width:18px;max-height:18px;border-radius:50%;border:2px solid #0d0e12;box-sizing:border-box;pointer-events:none}
+.av>.dot.on{background:#3ddc97}
+.av>.dot.away{background:#f5b94a}
+.av>.dot.off{background:#ff4d5e}
+.av.big>.dot{border-width:3px;right:0;bottom:0}
+.so-st,.pstat{color:var(--mute)}
+.so-new{color:#9fc0ff;font-weight:600}
+.pinfo .pstat{display:block}
+.prof-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:14px 0 4px}
+.prof-status>span{font-weight:600;font-size:15px}
+.seg{display:inline-flex;padding:3px;border:1px solid var(--line2);border-radius:12px;background:var(--card)}
+.seg button{border:0;background:transparent;color:var(--mute);font-weight:600;font-size:14px;padding:0 14px;min-height:38px;border-radius:9px;cursor:pointer}
+.seg button[aria-checked=true]{background:rgba(255,255,255,.1);color:var(--ink)}
+.prof-status .hint{width:100%;margin:0}

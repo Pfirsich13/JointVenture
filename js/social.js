@@ -1,5 +1,5 @@
 /* =========================================================================
-   social.js – Freunde, Chat (privat und Lobby), später Online-Status
+   social.js – Freunde, Chat (privat und Lobby) und Online-Status
    -------------------------------------------------------------------------
    Social.open(tab)        -> Fenster öffnen: 'friends', 'lobby' oder 'chat:<id>'
                               (am PC unten rechts wie ein Messenger, am Handy Vollbild)
@@ -12,6 +12,10 @@
      search_players (RPC)      – liefert nur id, Name, Bild
    Nachrichten werden immer als reiner Text angezeigt (escaped). Nur Einladungs-Links
    zu dieser Seite werden anklickbar.
+   Online-Status: Realtime Presence auf dem Kanal "online" ({ user_id, status }),
+   dazu profiles.last_seen_at etwa jede Minute. Jedes Profilbild mit data-uid bekommt
+   automatisch den Punkt (grün online, gelb abwesend, rot offline).
+   Social.setMode('auto'|'invisible'), Social.mode(), Social.statusLabel(id)
    ========================================================================= */
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
@@ -40,8 +44,10 @@
   const incoming = () => state.friendships.filter((f) => f.status === 'pending' && f.addressee === state.uid);
   const outgoing = () => state.friendships.filter((f) => f.status === 'pending' && f.requester === state.uid);
   const unreadOf = (id) => state.unread[id] || 0;
+  const RANK = { online: 0, abwesend: 1 };
+  const rankOf = (id) => (id in pres.map ? RANK[pres.map[id]] : 2);
   const friends = () => state.friendships.filter((f) => f.status === 'accepted')
-    .sort((a, b) => (unreadOf(other(b)) - unreadOf(other(a))) || prof(other(a)).name.localeCompare(prof(other(b)).name, 'de'));
+    .sort((a, b) => (unreadOf(other(b)) - unreadOf(other(a))) || (rankOf(other(a)) - rankOf(other(b))) || prof(other(a)).name.localeCompare(prof(other(b)).name, 'de'));
   const isFriend = (id) => state.friendships.some((f) => f.status === 'accepted' && other(f) === id);
   const relation = (id) => {
     if (state.blocks.some((b) => b.blocked === id)) return { kind: 'blocked' };
@@ -84,7 +90,7 @@
   async function loadProfiles(ids) {
     ids = [...new Set(ids)].filter(Boolean);
     if (!ids.length) return;
-    const { data, error } = await db().from('profiles').select('id,name,avatar_path').in('id', ids);
+    const { data, error } = await db().from('profiles').select('id,name,avatar_path,last_seen_at').in('id', ids);
     if (error) throw error;
     (data || []).forEach((p) => { state.profiles[p.id] = Object.assign(state.profiles[p.id] || {}, p); });
   }
@@ -187,7 +193,7 @@
       ${inc.length ? `<h4>Anfragen <span class="cnt">${inc.length}</span></h4>${inc.map((f) => row(prof(other(f)), 'möchte dein Freund sein',
         `<button class="sbtn pri" type="button" data-accept="${f.id}">Annehmen</button><button class="sbtn" type="button" data-decline="${f.id}">Ablehnen</button>`)).join('')}` : ''}
       ${state.loaded ? `<h4>Deine Freunde${fr.length ? ` · ${fr.length}` : ''}</h4>
-      ${fr.length ? fr.map((f) => { const p = prof(other(f)), u = unreadOf(p.id); return row(p, esc(u ? (u === 1 ? '1 neue Nachricht' : `${u} neue Nachrichten`) : statusText(p, f)),
+      ${fr.length ? fr.map((f) => { const p = prof(other(f)), u = unreadOf(p.id); return row(p, u ? `<span class="so-new">${u === 1 ? '1 neue Nachricht' : `${u} neue Nachrichten`}</span>` : `<span class="so-st">${esc(statusLabel(p.id))}</span>`,
         `<button class="ibtn" type="button" data-chat="${esc(p.id)}" title="Chatten" aria-label="Mit ${esc(p.name)} chatten${u ? `, ${u} ungelesen` : ''}">${ICON.chat}${u ? `<b class="cnt">${u > 99 ? '99+' : u}</b>` : ''}</button>
          <button class="ibtn" type="button" data-challenge="${esc(p.id)}" title="Herausfordern" aria-label="${esc(p.name)} herausfordern">${ICON.play}</button>
          <button class="ibtn" type="button" data-more="${esc(p.id)}" title="Mehr" aria-label="Mehr zu ${esc(p.name)}" aria-expanded="false">${ICON.more}</button>`,
@@ -197,7 +203,6 @@
       ${state.blocks.length ? `<details class="so-blocked"><summary>Blockiert · ${state.blocks.length}</summary>${state.blocks.map((b) => row(prof(b.blocked), '', `<button class="sbtn" type="button" data-unblock="${esc(b.blocked)}">Freigeben</button>`)).join('')}</details>` : ''}`;
     if (keepQ) search(keepQ, true);
   }
-  function statusText(p, f) { return f && f.accepted_at ? 'Freunde seit ' + since(f.accepted_at) : 'Freund'; }
 
   async function search(q, quiet) {
     const box = dock && $('.so-results', dock); if (!box) return;
@@ -240,7 +245,7 @@
     const p = prof(chat.with), body = $('.so-body', dock);
     let head = $('.so-chathead', dock);
     if (!head) { head = document.createElement('div'); head.className = 'so-chathead'; body.before(head); }
-    head.innerHTML = `<button class="ibtn" type="button" data-back="1" title="Zurück" aria-label="Zurück zur Freundesliste">${ICON.back}</button>${avatar(p)}<div class="so-who"><b>${esc(p.name)}</b><small class="so-stat"></small></div>
+    head.innerHTML = `<button class="ibtn" type="button" data-back="1" title="Zurück" aria-label="Zurück zur Freundesliste">${ICON.back}</button>${avatar(p)}<div class="so-who"><b>${esc(p.name)}</b><small class="so-stat">${esc(statusLabel(p.id))}</small></div>
       <button class="ibtn" type="button" data-challenge="${esc(p.id)}" title="Herausfordern" aria-label="${esc(p.name)} herausfordern">${ICON.play}</button>`;
   }
   async function loadChat(older) {
@@ -414,6 +419,7 @@
     btn.disabled = false; if (dock) t.focus();
   }
   function onClick(e) {
+    if (!dock) return;                                              // gerade geschlossen
     const link = e.target.closest('a.so-join');
     if (link) { if (matchMedia('(max-width:620px)').matches) close(); return; }    // Einladung annehmen: die Seite springt ins Spiel
     const bub = e.target.closest('[data-bubble]');
@@ -491,6 +497,141 @@
       <button class="sbtn so-back" type="button" data-pick-cancel="${esc(from)}">Zurück</button>`;
   }
 
+  /* ---------- Online-Status ---------- */
+  const AWAY_AFTER = 5 * 60e3, SEEN_EVERY = 60e3;
+  const pres = { ch: null, joined: false, tracking: false, map: {}, mine: 'online', mode: 'auto', lastInput: Date.now(), seenAt: 0, timer: 0 };
+  const DOT = { online: 'on', abwesend: 'away', offline: 'off', invisible: 'off' };
+  function ago(t) {
+    const s = Math.max(0, (Date.now() - new Date(t)) / 1000);
+    if (s < 3600) return `vor ${Math.max(1, Math.floor(s / 60))} Min.`;
+    if (s < 86400) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `vor ${h} Std.${m && h < 6 ? ` ${m} Min.` : ''}`; }
+    const d = Math.round(s / 86400);
+    return d < 30 ? (d === 1 ? 'vor 1 Tag' : `vor ${d} Tagen`) : 'am ' + new Date(t).toLocaleDateString('de-DE');
+  }
+  function statusOf(id) {
+    if (id && id === state.uid) return pres.mode === 'invisible' ? 'invisible' : pres.mine;
+    return pres.map[id] || 'offline';
+  }
+  function statusLabel(id) {
+    const s = statusOf(id);
+    if (s === 'online') return 'Online';
+    if (s === 'abwesend') return 'Abwesend';
+    if (s === 'invisible') return 'Unsichtbar: andere sehen dich offline';
+    const seen = state.profiles[id] && state.profiles[id].last_seen_at;
+    return seen ? `Offline, zuletzt ${ago(seen)}` : 'Offline';
+  }
+  // Punkt an ein Profilbild (span.av mit data-uid) hängen oder aktualisieren
+  function paintOne(av) {
+    const id = av.dataset.uid, old = av.querySelector(':scope > .dot');
+    if (!id || !state.uid) { if (old) old.remove(); return; }
+    const s = statusOf(id), cls = 'dot ' + DOT[s], label = statusLabel(id);
+    const d = old || av.appendChild(document.createElement('i'));
+    if (d.className !== cls) d.className = cls;
+    if (av.title !== label) av.title = label;
+    if (!av.closest('[aria-hidden=true]') && av.getAttribute('aria-label') !== label) { av.setAttribute('role', 'img'); av.setAttribute('aria-label', label); }
+    if (s === 'offline' && !(state.profiles[id] && 'last_seen_at' in state.profiles[id])) needSeen(id);
+  }
+  function paint() {
+    document.querySelectorAll('.av[data-uid]').forEach(paintOne);
+    document.querySelectorAll('[data-stat]').forEach((el) => { const t = statusLabel(el.dataset.stat); if (el.textContent !== t) el.textContent = t; });
+    if (dock) {
+      dock.querySelectorAll('.so-row[data-uid] .so-st').forEach((el) => { const t = statusLabel(el.closest('.so-row').dataset.uid); if (el.textContent !== t) el.textContent = t; });
+      const st = $('.so-stat', dock); if (st && chat.with) st.textContent = statusLabel(chat.with);
+    }
+  }
+  // „zuletzt online“ für Spieler nachladen, die noch nicht im Speicher sind (Rangliste, Admin)
+  const seenWanted = new Set(); let seenT = 0;
+  function needSeen(id) {
+    if (seenWanted.has(id)) return;
+    seenWanted.add(id); clearTimeout(seenT);
+    seenT = setTimeout(() => { const ids = [...seenWanted]; loadProfiles(ids).then(paint).catch(() => { }); }, 300);
+  }
+  function readPresence() {
+    const raw = pres.ch ? pres.ch.presenceState() : {}, map = {};
+    Object.keys(raw).forEach((k) => (raw[k] || []).forEach((m) => {
+      const id = m.user_id || k; if (map[id] === 'online') return;
+      map[id] = m.status === 'abwesend' ? 'abwesend' : 'online';
+    }));
+    delete map[state.uid];
+    // Wer gerade offline gegangen ist: „zuletzt online“ neu laden
+    const gone = Object.keys(pres.map).filter((id) => !map[id]);
+    pres.map = map; paint();
+    if (gone.length) { gone.forEach((id) => { if (state.profiles[id]) delete state.profiles[id].last_seen_at; }); loadProfiles(gone).then(paint).catch(() => { }); }
+  }
+  const computeMine = () => (document.hidden || Date.now() - pres.lastInput > AWAY_AFTER ? 'abwesend' : 'online');
+  function pushStatus(force) {
+    if (!state.uid) return;
+    const s = computeMine(), changed = s !== pres.mine;
+    pres.mine = s;
+    if (pres.ch && pres.joined) {
+      if (pres.mode === 'invisible') { if (pres.tracking) { pres.ch.untrack(); pres.tracking = false; } }
+      else if (force || changed || !pres.tracking) { pres.ch.track({ user_id: state.uid, status: s }); pres.tracking = true; }
+    }
+    if (changed || force) paint();
+    if (pres.mode !== 'invisible' && Date.now() - pres.seenAt > SEEN_EVERY - 3000) touchSeen();
+  }
+  function touchSeen() {
+    pres.seenAt = Date.now();
+    db().from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', state.uid).then(() => { }, () => { });
+  }
+  async function startPresence(uid) {
+    stopPresence();
+    const c = db(); if (!c || !c.channel) return;
+    const tok = pres.tok;
+    try {
+      const { data } = await c.from('profiles').select('presence_mode').eq('id', uid).maybeSingle();
+      pres.mode = data && data.presence_mode === 'invisible' ? 'invisible' : 'auto';
+    } catch (e) { pres.mode = 'auto'; }
+    if (tok !== pres.tok || uid !== me()) return;                      // inzwischen neu gestartet oder abgemeldet
+    pres.lastInput = Date.now(); pres.mine = computeMine();
+    pres.ch = c.channel('online', { config: { presence: { key: uid } } })
+      .on('presence', { event: 'sync' }, readPresence)
+      .subscribe((st) => { if (st === 'SUBSCRIBED') { pres.joined = true; pushStatus(true); } });
+    let n = 0;
+    pres.timer = setInterval(() => { pushStatus(false); if (++n % 3 === 0) paint(); }, 20000);   // „vor … Min.“ aktuell halten
+    paint();
+  }
+  function stopPresence() {
+    pres.tok = (pres.tok || 0) + 1; clearInterval(pres.timer);
+    if (pres.ch) { try { if (pres.tracking) pres.ch.untrack(); db().removeChannel(pres.ch); } catch (e) { } }
+    pres.ch = null; pres.joined = false; pres.tracking = false; pres.map = {};
+  }
+  /** Mein Status: 'auto' (online/abwesend) oder 'invisible' (erscheint offline) */
+  async function setMode(mode) {
+    mode = mode === 'invisible' ? 'invisible' : 'auto';
+    const { error } = await db().from('profiles').update({ presence_mode: mode }).eq('id', state.uid);
+    if (error) throw new Error(deErr(error));
+    pres.mode = mode; pushStatus(true);
+    if (mode === 'auto') touchSeen();
+  }
+  // Eingaben merken: wer 5 Minuten nichts tut oder den Tab wechselt, ist „abwesend“
+  let inputT = 0;
+  const onActivity = () => {
+    const now = Date.now(); if (now - inputT < 1000) return; inputT = now;
+    pres.lastInput = now; if (pres.mine === 'abwesend' && !document.hidden) pushStatus(false);
+  };
+  ['pointerdown', 'keydown', 'touchstart', 'wheel', 'mousemove'].forEach((ev) => addEventListener(ev, onActivity, { passive: true, capture: true }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pres.lastInput = Date.now(); pushStatus(false); });
+  // Neue Profilbilder auf der Seite bekommen den Punkt automatisch
+  function watchAvatars() {
+    if (!document.body || watchAvatars.on) return; watchAvatars.on = true;
+    new MutationObserver((muts) => {
+      const todo = new Set();
+      muts.forEach((m) => {
+        if (m.type === 'attributes') { if (m.target.matches && m.target.matches('.av')) todo.add(m.target); return; }
+        const t = m.target.nodeType === 1 && m.target.closest ? m.target.closest('.av[data-uid]') : null; if (t) todo.add(t);
+        m.addedNodes.forEach((n) => {
+          if (n.nodeType !== 1) return;
+          if (n.matches('.av[data-uid]')) todo.add(n);
+          if (n.querySelector && n.querySelector('[data-stat]')) setTimeout(paint, 0);
+          if (n.firstElementChild) n.querySelectorAll('.av[data-uid]').forEach((a) => todo.add(a));
+        });
+      });
+      todo.forEach(paintOne);
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-uid'] });
+  }
+  watchAvatars(); document.addEventListener('DOMContentLoaded', watchAvatars);
+
   /* ---------- Live-Updates ---------- */
   function onMessage(payload) {
     const m = payload.new; if (!m || !m.id) return;
@@ -541,10 +682,12 @@
   function onAuth() {
     const uid = me();
     const btn = $('#friendsBtn'); if (btn) btn.hidden = !(window.Auth && Auth.ready);
-    if (uid === state.uid && state.loaded) return;
-    unsubscribe(); clearInterval(pollT); leaveLobby();
+    if (uid && uid === state.uid && (state.loaded || pres.ch)) return;
+    unsubscribe(); clearInterval(pollT); leaveLobby(); stopPresence();
     state.uid = uid; state.friendships = []; state.blocks = []; state.unread = {}; state.loaded = false; updateBadge();
-    if (!uid) { close(); return; }
+    if (!uid) { close(); paint(); return; }
+    startPresence(uid);
+    if (!$('#friendsBtn')) return;                                    // Admin-Programm: nur Online-Status
     load().catch((e) => console.warn(e));
     subscribe(uid);
     pollT = setInterval(() => { if (!document.hidden) reload(); }, 60000);   // falls Live-Updates mal ausfallen
@@ -554,5 +697,5 @@
   function bindButton() { const b = $('#friendsBtn'); if (b && !b.onclick) b.onclick = () => (dock ? close() : open()); }
   bindButton(); document.addEventListener('DOMContentLoaded', bindButton);
 
-  window.Social = { open, close, avatar, reload, sendInvite, state, isFriend };
+  window.Social = { open, close, avatar, reload, sendInvite, state, isFriend, setMode, mode: () => pres.mode, statusLabel, statusOf, paint };
 })();

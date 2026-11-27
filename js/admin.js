@@ -565,8 +565,8 @@
         <p class="hint">Passwörter sind verschlüsselt gespeichert, niemand kann sie lesen. Darum gibt es hier ein Einmal-Passwort, das die Person nach dem Anmelden sofort ändern muss.</p></div>
       <p class="hint">Neue Spieler registrieren sich selbst auf der Seite (oben rechts „Anmelden“). Hier kannst du ihnen Admin-Rechte geben.</p>
       <div class="cards">${pr.data.map((p) => `<article class="panel player" data-id="${p.id}">
-        <span class="av">${p.avatar_path ? `<img src="${esc(Auth.avatarUrl(p.avatar_path))}" alt="" loading="lazy">` : esc((p.name || '?')[0].toUpperCase())}</span>
-        <div class="pinfo"><b>${esc(p.name)}${p.id === me ? ' <small>(du)</small>' : ''}</b><small>dabei seit ${new Date(p.created_at).toLocaleDateString('de-DE')} · ${count[p.id] || 0} Matches</small></div>
+        <span class="av" data-uid="${esc(p.id)}">${p.avatar_path ? `<img src="${esc(Auth.avatarUrl(p.avatar_path))}" alt="" loading="lazy">` : esc((p.name || '?')[0].toUpperCase())}</span>
+        <div class="pinfo"><b>${esc(p.name)}${p.id === me ? ' <small>(du)</small>' : ''}</b><small>dabei seit ${new Date(p.created_at).toLocaleDateString('de-DE')} · ${count[p.id] || 0} Matches</small>${window.Social ? `<small class="pstat" data-stat="${esc(p.id)}"></small>` : ''}</div>
         <span class="pill ${p.role === 'admin' ? 'ok' : ''}">${p.role === 'admin' ? 'Admin' : 'Spieler'}</span>
         <button class="btn" type="button" data-role="${p.role === 'admin' ? 'player' : 'admin'}">${p.role === 'admin' ? 'Admin entfernen' : 'Zum Admin machen'}</button>
       </article>`).join('')}</div>`;

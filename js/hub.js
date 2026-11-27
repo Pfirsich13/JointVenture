@@ -212,6 +212,7 @@
     $('#acctTxt').textContent = u ? hub.getName() : (window.Auth && Auth.ready ? 'Anmelden' : hub.getName());
     const pic = u && Auth.avatar && Auth.avatar();
     $('#acctAv').innerHTML = pic ? `<img src="${esc(pic)}" alt="">` : esc((hub.getName()[0] || '?').toUpperCase());
+    if (u) $('#acctAv').dataset.uid = u.id; else delete $('#acctAv').dataset.uid;     // Status-Punkt (social.js)
     $('#acctBtn').classList.toggle('in', !!u);
     $('#acctBtn').setAttribute('aria-label', u ? 'Konto: ' + hub.getName() : 'Anmelden');
   }
@@ -276,13 +277,16 @@
   const MODES = [['online', 'Online'], ['bot', 'Training'], ['local', 'Lokal']];
   async function openProfile() {
     const u = Auth.user();
-    const el = sheet(`<div class="prof-head"><span class="av big" id="profPic"></span>
+    const el = sheet(`<div class="prof-head"><span class="av big" id="profPic" data-uid="${esc(u.id)}"></span>
         <div><h3>${esc(hub.getName())}</h3><p>${esc(u.email || '')}${isAdmin() ? ' · Admin' : ''}</p>
         <div class="pic-btns"><label class="btn small">Profilbild wählen<input type="file" accept="image/*" hidden data-pic></label><button class="btn small" type="button" data-nopic hidden>Entfernen</button></div></div></div>
       <p class="msg pic-msg" aria-live="polite"></p>
       <form class="prof-name" novalidate><label class="f"><span>Dein Name (so sehen dich die anderen)</span>
         <div class="inline"><input class="field" name="n" maxlength="16" value="${esc(hub.getName())}" autocomplete="nickname"><button class="btn" type="submit">Speichern</button></div></label>
         <p class="msg" aria-live="polite"></p></form>
+      ${window.Social ? `<div class="prof-status"><span>Mein Status</span><div class="seg" role="radiogroup" aria-label="Mein Status">
+        <button type="button" role="radio" data-pmode="auto">Automatisch</button><button type="button" role="radio" data-pmode="invisible">Unsichtbar</button></div>
+        <p class="hint pmode-hint"></p></div>` : ''}
       <h4>Deine Statistik</h4><div class="prof-stats"><p class="empty">Lädt …</p></div>
       <p class="prof-rank"></p>
       <details class="prof-pw"><summary>Passwort ändern</summary>
@@ -311,6 +315,19 @@
       catch (err) { picMsg.textContent = err.message; }
     };
     el.querySelector('[data-out]').onclick = async () => { await Auth.signOut(); el.remove(); };
+    // Mein Status: Automatisch (online/abwesend) oder Unsichtbar (erscheint offline)
+    const showMode = () => {
+      const m = Social.mode();
+      el.querySelectorAll('[data-pmode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.pmode === m)));
+      el.querySelector('.pmode-hint').textContent = m === 'invisible' ? 'Du erscheinst für alle als offline. „Zuletzt online“ wird nicht mehr aktualisiert.' : 'Andere sehen, ob du online oder abwesend bist und wann du zuletzt online warst.';
+    };
+    if (window.Social) {
+      showMode();
+      el.querySelectorAll('[data-pmode]').forEach((b) => { b.onclick = async () => {
+        try { await Social.setMode(b.dataset.pmode); showMode(); toast(b.dataset.pmode === 'invisible' ? 'Du bist jetzt unsichtbar' : 'Dein Status ist wieder sichtbar'); }
+        catch (err) { toast(err.message); }
+      }; });
+    }
     el.querySelector('[data-mine]').onclick = () => { el.remove(); openReport('', true); };
     bindPasswordForm(el.querySelector('.prof-pw form'), () => { el.querySelector('.prof-pw').open = false; });
     const nf = el.querySelector('.prof-name'), nmsg = nf.querySelector('.msg');
@@ -367,7 +384,7 @@
     box.innerHTML = `<table class="rank-table"><thead><tr><th>Platz</th><th>Spieler</th><th>Siege</th><th>Niederl.</th><th>Quote</th></tr></thead><tbody>${shown.map((r) => {
       const i = list.indexOf(r), q = r.matches ? Math.round(r.wins / r.matches * 100) : 0;
       const pic = Auth.avatarUrl(r.avatar_path);
-      return `<tr class="${r.player_id === me ? 'me' : ''}"><td>${medal[i] || i + 1}</td><td><span class="rank-who"><span class="av sm">${pic ? `<img src="${esc(pic)}" alt="" loading="lazy">` : esc((r.name || '?')[0].toUpperCase())}</span>${esc(r.name)}${r.player_id === me ? ' <small>(du)</small>' : ''}</span></td><td>${r.wins}</td><td>${r.losses}</td><td>${q} %</td></tr>`;
+      return `<tr class="${r.player_id === me ? 'me' : ''}"><td>${medal[i] || i + 1}</td><td><span class="rank-who"><span class="av sm" data-uid="${esc(r.player_id)}">${pic ? `<img src="${esc(pic)}" alt="" loading="lazy">` : esc((r.name || '?')[0].toUpperCase())}</span>${esc(r.name)}${r.player_id === me ? ' <small>(du)</small>' : ''}</span></td><td>${r.wins}</td><td>${r.losses}</td><td>${q} %</td></tr>`;
     }).join('')}</tbody></table>`;
   }
   document.addEventListener('click', (e) => {
