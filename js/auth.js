@@ -17,7 +17,7 @@
 (function () {
   const S = window.SITE || {};
   const configured = !!(S.supabaseUrl && S.supabaseKey);
-  let client = null, user = null, profileName = '', role = 'player', avatarPath = null, failed = false, loaded = false;
+  let client = null, user = null, profileName = '', role = 'player', avatarPath = null, mustChange = false, failed = false, loaded = false;
   const listeners = [];
   const emit = () => listeners.forEach((fn) => { try { fn(user); } catch (e) { console.error(e); } });
 
@@ -30,11 +30,12 @@
   }
 
   async function loadProfile() {
-    profileName = ''; role = 'player'; avatarPath = null;
+    profileName = ''; role = 'player'; avatarPath = null; mustChange = false;
     if (!user) return;
     profileName = (user.user_metadata && user.user_metadata.name) || '';
     try {
-      const { data } = await client.from('profiles').select('name,role,avatar_path').eq('id', user.id).maybeSingle();
+      const { data } = await client.from('profiles').select('name,role,avatar_path,must_change_password').eq('id', user.id).maybeSingle();
+      if (data) mustChange = !!data.must_change_password;
       if (data && data.name) profileName = data.name;
       if (data && data.role) role = data.role;
       if (data) avatarPath = data.avatar_path || null;
@@ -141,6 +142,15 @@
     async setPassword(password) {
       need(); if (!user) throw new Error('Bitte melde dich zuerst an.');
       const { error } = await client.auth.updateUser({ password });
+      if (error) throw new Error(deErr(error));
+      if (mustChange) { await client.rpc('password_changed'); mustChange = false; emit(); }
+    },
+    /** Nach einem Einmal-Passwort muss ein neues festgelegt werden */
+    mustChangePassword: () => !!user && mustChange,
+    /** "Passwort vergessen": Anfrage an die Admins (geht auch ohne Anmeldung) */
+    async requestPasswordHelp({ email, name, message }) {
+      need();
+      const { error } = await client.from('password_requests').insert({ email, name: name || null, message: message || null });
       if (error) throw new Error(deErr(error));
     },
     async removeAvatar() {

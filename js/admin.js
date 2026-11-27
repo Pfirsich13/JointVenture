@@ -46,9 +46,13 @@
   }
   // Zahl offener Meldungen am Reiter
   async function updateBadge() {
-    const { count } = await db().from('reports').select('id', { count: 'exact', head: true }).in('status', ['neu', 'in_arbeit']);
-    const b = root && root.querySelector('[data-tab=reports]'); if (!b) return;
-    b.innerHTML = 'Meldungen' + (count ? ` <span class="badge">${count}</span>` : '');
+    const [r, p] = await Promise.all([
+      db().from('reports').select('id', { count: 'exact', head: true }).in('status', ['neu', 'in_arbeit']),
+      db().from('password_requests').select('id', { count: 'exact', head: true }).eq('status', 'offen')
+    ]);
+    const b = root && root.querySelector('[data-tab=reports]'), pb = root && root.querySelector('[data-tab=players]');
+    if (b) b.innerHTML = 'Meldungen' + (r.count ? ` <span class="badge">${r.count}</span>` : '');
+    if (pb) pb.innerHTML = 'Spieler' + (p.count ? ` <span class="badge">${p.count}</span>` : '');
   }
   // Links zur Seite (im Admin-Programm liegt die Seite einen Ordner höher)
   const siteLink = (hash) => (ctx && ctx.app ? '../' : '') + (hash ? '#' + hash : '');
@@ -520,15 +524,46 @@
   }
 
   /* ---------- Spieler ---------- */
+  // Passwort vergessen: Einmal-Passwort über die Edge Function setzen
+  async function resetPassword(email, requestId) {
+    const { data, error } = await db().functions.invoke('admin-reset-password', { body: { email, request_id: requestId || null } });
+    if (error) {
+      let m = error.message || String(error);
+      try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch (e) { }
+      throw new Error(m);
+    }
+    if (!data || !data.password) throw new Error((data && data.error) || 'Keine Antwort vom Server.');
+    return data;
+  }
+  async function loadPwRequests() {
+    const { data, error } = await db().from('password_requests').select('*').eq('status', 'offen').order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    return data;
+  }
+  function pwResultHtml(r) {
+    return `<div class="pw-result"><b>Einmal-Passwort für ${esc(r.name || r.email)}:</b><br><code>${esc(r.password)}</code><br>
+      <button class="btn" type="button" data-copy-pw="${esc(r.password)}">Kopieren</button>
+      <p class="hint">Gib es der Person persönlich oder per WhatsApp weiter. Es wird nur jetzt angezeigt. Nach dem Anmelden muss sie ein eigenes Passwort festlegen.</p></div>`;
+  }
+
   async function players(body) {
-    const [pr, rs] = await Promise.all([
+    const [pr, rs, pwr] = await Promise.all([
       db().from('profiles').select('id,name,role,created_at,avatar_path').order('created_at'),
-      db().from('results').select('user_id').limit(5000)
+      db().from('results').select('user_id').limit(5000),
+      loadPwRequests().catch(() => [])
     ]);
     if (pr.error) throw pr.error;
     const count = {}; (rs.data || []).forEach((r) => { count[r.user_id] = (count[r.user_id] || 0) + 1; });
     const me = Auth.user() && Auth.user().id;
-    body.innerHTML = `<p class="hint">Neue Spieler registrieren sich selbst auf der Seite (oben rechts „Anmelden“). Hier kannst du ihnen Admin-Rechte geben.</p>
+    body.innerHTML = `<div class="panel pw-panel"><h3>Passwort-Anfragen${pwr.length ? ` <span class="badge">${pwr.length}</span>` : ''}</h3>
+        ${pwr.length ? pwr.map((r) => `<div class="pw-req" data-req="${r.id}" data-email="${esc(r.email)}"><div><b>${esc(r.name || 'Ohne Namen')}</b><small>${esc(r.email)} · ${ago(r.created_at)}</small></div>
+          <div class="pw-inline"><button class="btn primary" type="button" data-pw-make>Einmal-Passwort erstellen</button><button class="btn" type="button" data-pw-done>Erledigt</button></div>
+          ${r.message ? `<p class="pw-msg">${esc(r.message)}</p>` : ''}<div class="pw-out" style="grid-column:1/-1"></div></div>`).join('') : '<p class="empty">Keine offenen Anfragen.</p>'}
+        <details class="bk-help"><summary>Einmal-Passwort ohne Anfrage erstellen</summary>
+          <form class="pw-inline" id="pwManual"><input class="field" name="email" type="email" placeholder="E-Mail des Spielers"><button class="btn" type="submit">Erstellen</button></form>
+          <div class="pw-out"></div></details>
+        <p class="hint">Passwörter sind verschlüsselt gespeichert, niemand kann sie lesen. Darum gibt es hier ein Einmal-Passwort, das die Person nach dem Anmelden sofort ändern muss.</p></div>
+      <p class="hint">Neue Spieler registrieren sich selbst auf der Seite (oben rechts „Anmelden“). Hier kannst du ihnen Admin-Rechte geben.</p>
       <div class="cards">${pr.data.map((p) => `<article class="panel player" data-id="${p.id}">
         <span class="av">${p.avatar_path ? `<img src="${esc(Auth.avatarUrl(p.avatar_path))}" alt="" loading="lazy">` : esc((p.name || '?')[0].toUpperCase())}</span>
         <div class="pinfo"><b>${esc(p.name)}${p.id === me ? ' <small>(du)</small>' : ''}</b><small>dabei seit ${new Date(p.created_at).toLocaleDateString('de-DE')} · ${count[p.id] || 0} Matches</small></div>
@@ -536,6 +571,18 @@
         <button class="btn" type="button" data-role="${p.role === 'admin' ? 'player' : 'admin'}">${p.role === 'admin' ? 'Admin entfernen' : 'Zum Admin machen'}</button>
       </article>`).join('')}</div>`;
     body.addEventListener('click', async (e) => {
+      const cp = e.target.closest('[data-copy-pw]');
+      if (cp) { ctx.toast(await copyText(cp.dataset.copyPw) ? 'Einmal-Passwort kopiert' : 'Kopieren ging nicht'); return; }
+      const mk = e.target.closest('[data-pw-make]'), dn = e.target.closest('[data-pw-done]');
+      if (mk || dn) {
+        const row = (mk || dn).closest('[data-req]'), id = Number(row.dataset.req), email = row.dataset.email;
+        if (dn) { const { error } = await db().from('password_requests').update({ status: 'erledigt', erledigt_von: Auth.name() || null, erledigt_at: now() }).eq('id', id); if (error) return fail(error); ctx.toast('Anfrage erledigt'); show(); updateBadge(); return; }
+        if (!confirm(`Für ${email} ein Einmal-Passwort erstellen? Das alte Passwort funktioniert danach nicht mehr.`)) return;
+        mk.disabled = true; mk.textContent = 'Erstellt …';
+        try { const r = await resetPassword(email, id); row.querySelector('.pw-out').innerHTML = pwResultHtml(r); row.querySelector('.pw-inline').remove(); updateBadge(); }
+        catch (err) { mk.disabled = false; mk.textContent = 'Einmal-Passwort erstellen'; fail(err); }
+        return;
+      }
       const b = e.target.closest('[data-role]'); if (!b) return;
       const id = b.closest('[data-id]').dataset.id, role = b.dataset.role;
       if (role === 'player' && id === me && !confirm('Dir selbst die Admin-Rechte entziehen? Dann kommst du nicht mehr ins Admin-Panel.')) return;
@@ -543,6 +590,15 @@
       if (error) return fail(error);
       ctx.toast(role === 'admin' ? 'Ist jetzt Admin' : 'Admin-Rechte entfernt');
       if (id === me) location.reload(); else show();
+    });
+    body.querySelector('#pwManual').addEventListener('submit', async (e) => {
+      e.preventDefault(); const f = e.target, email = f.elements.email.value.trim(), out = f.parentElement.querySelector('.pw-out');
+      if (!email) return;
+      if (!confirm(`Für ${email} ein Einmal-Passwort erstellen? Das alte Passwort funktioniert danach nicht mehr.`)) return;
+      const btn = f.querySelector('button'); btn.disabled = true;
+      try { out.innerHTML = pwResultHtml(await resetPassword(email)); f.reset(); updateBadge(); }
+      catch (err) { fail(err); }
+      btn.disabled = false;
     });
   }
 
@@ -714,7 +770,7 @@
   // Werkzeuge für die Konsole (console.js) und das Admin-Programm (konsole/)
   const api = {
     db, now, ago, esc, toast: (m) => ctx.toast(m), refresh: () => ctx.refresh(), goTab, updateBadge,
-    loadReports, reportMarkdown, copyForClaude, copyText, setReport, rLabel,
+    loadReports, reportMarkdown, copyForClaude, copyText, setReport, rLabel, resetPassword, loadPwRequests,
     doBackup, canPickFolder, release: async (id, status) => { const { error } = await db().from('games').update({ status, updated_at: now() }).eq('id', id); if (error) throw error; await ctx.refresh(); }
   };
   window.Admin = { render, api };

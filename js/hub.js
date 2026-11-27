@@ -192,6 +192,7 @@
   }
   function renderAll() { renderAccount(); renderStand(); }
   async function refreshCloud() {
+    forcePasswordChange();
     cloud = window.Auth && Auth.user() ? await Auth.loadResults() : null;
     renderAll(); renderRank();
   }
@@ -216,7 +217,9 @@
         <p class="hint pw-hint" hidden>Mindestens 8 Zeichen, mit Buchstaben und Zahlen.</p>
         <p class="msg" aria-live="polite"></p>
         <div class="row"><button class="btn" type="button" data-close>Abbrechen</button><button class="btn primary" type="submit">Anmelden</button></div>
+        <button class="linkbtn" type="button" data-forgot>Passwort vergessen?</button>
       </form>`);
+    el.querySelector('[data-forgot]').onclick = () => { const mail = el.querySelector('[name=email]').value.trim(); el.remove(); openForgot(mail); };
     const f = el.querySelector('form'), msg = el.querySelector('.msg'), submit = f.querySelector('[type=submit]');
     el.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => {
       mode = b.dataset.t;
@@ -225,6 +228,7 @@
       f.elements.pw.autocomplete = mode === 'up' ? 'new-password' : 'current-password'; msg.textContent = '';
       f.elements.pw.placeholder = mode === 'up' ? 'Passwort (mind. 8 Zeichen)' : 'Passwort';
       el.querySelector('.pw-hint').hidden = mode !== 'up';
+      el.querySelector('[data-forgot]').hidden = mode === 'up';
     }; });
     f.addEventListener('submit', async (e) => {
       e.preventDefault(); msg.className = 'msg'; msg.textContent = '';
@@ -345,6 +349,47 @@
     const c = e.target.closest('[data-rank]'); if (c) { rankGame = c.dataset.rank; renderRank(); return; }
     if (e.target.closest('#rankBox [data-login]')) openAccount();
   });
+
+  /* ---------- Passwort vergessen: Anfrage an die Admins ---------- */
+  function openForgot(mail) {
+    if (document.querySelector('.sheet')) return;
+    const el = sheet(`<h3>Passwort vergessen</h3>
+      <p>Kein Problem. Deine Anfrage geht an die Admins. Sie geben dir ein Einmal-Passwort, mit dem du dich anmeldest und dann ein neues festlegst.</p>
+      <form novalidate><input class="field" name="email" type="email" autocomplete="email" placeholder="Deine E-Mail" value="${esc(mail || '')}">
+        <input class="field" name="name" maxlength="40" autocomplete="nickname" placeholder="Dein Name auf der Seite">
+        <textarea class="field" name="message" maxlength="500" rows="2" placeholder="Wie erreichen dich die Admins? (z. B. „schreib mir per WhatsApp“)"></textarea>
+        <p class="msg" aria-live="polite"></p>
+        <div class="row"><button class="btn" type="button" data-close>Abbrechen</button><button class="btn primary" type="submit">Anfrage senden</button></div></form>`);
+    const f = el.querySelector('form'), msg = f.querySelector('.msg'), btn = f.querySelector('[type=submit]');
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); msg.className = 'msg'; msg.textContent = '';
+      const email = f.elements.email.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = 'Bitte gib deine E-Mail-Adresse ein.'; return; }
+      btn.disabled = true;
+      try {
+        await Auth.requestPasswordHelp({ email, name: f.elements.name.value.trim(), message: f.elements.message.value.trim() });
+        // Immer dieselbe Antwort, egal ob es das Konto gibt
+        el.querySelector('.box').innerHTML = '<h3>Anfrage ist bei den Admins</h3><p>Sobald ein Admin sie sieht, bekommst du ein Einmal-Passwort. Damit meldest du dich an und legst sofort ein neues Passwort fest.</p><div class="row"><button class="btn primary" type="button" data-close>OK</button></div>';
+      } catch (err) { msg.textContent = /Zu viele/.test(err.message) ? err.message : 'Das hat nicht geklappt. Bitte später nochmal versuchen.'; btn.disabled = false; }
+    });
+    setTimeout(() => (mail ? f.elements.name : f.elements.email).focus(), 50);
+  }
+  // Nach dem Anmelden mit Einmal-Passwort: neues Passwort festlegen (lässt sich nicht wegklicken)
+  function forcePasswordChange() {
+    if (!window.Auth || !Auth.mustChangePassword || !Auth.mustChangePassword() || document.querySelector('.sheet.locked')) return;
+    document.querySelectorAll('.sheet').forEach((x) => x.remove());
+    const el = document.createElement('div'); el.className = 'sheet locked';
+    el.innerHTML = `<div class="box"><h3>Neues Passwort festlegen</h3><p>Du hast dich mit einem Einmal-Passwort angemeldet. Leg jetzt dein eigenes Passwort fest.</p>
+      <form novalidate><input class="field" name="p1" type="password" autocomplete="new-password" placeholder="Neues Passwort (mind. 8 Zeichen)">
+      <input class="field" name="p2" type="password" autocomplete="new-password" placeholder="Neues Passwort wiederholen">
+      <p class="hint">Mindestens 8 Zeichen, mit Buchstaben und Zahlen.</p><p class="msg" aria-live="polite"></p>
+      <div class="row"><button class="btn primary" type="submit">Passwort speichern</button></div></form>
+      <button class="linkbtn" type="button" data-out>Abmelden</button></div>`;
+    document.body.appendChild(el);
+    bindPasswordForm(el.querySelector('form'), () => el.remove());
+    el.querySelector('[data-out]').onclick = async () => { el.remove(); await Auth.signOut(); };
+    setTimeout(() => el.querySelector('[name=p1]').focus(), 50);
+  }
 
   /* ---------- Fehler melden ---------- */
   const REPORT_STATUS = { neu: ['Neu', ''], in_arbeit: ['In Arbeit', 'beta'], erledigt: ['Erledigt', 'ok'], abgelehnt: ['Kein Fehler', 'off'] };

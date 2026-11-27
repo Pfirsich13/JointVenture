@@ -130,6 +130,20 @@
         if (error) throw error; if (!data.length) return err(`Kein Projekt mit Nummer ${id}.`);
         await api.refresh(); ok(`${data[0].title}: ${upd.progress} %${st ? ', ' + st : ''}.`);
       }],
+      'passwort-anfragen': ['', 'offene Anfragen „Passwort vergessen“', async () => {
+        const list = await api.loadPwRequests();
+        if (!list.length) return ok('Keine offenen Passwort-Anfragen.');
+        print(pad('Nr', 5) + pad('Name', 16) + pad('E-Mail', 32) + 'Wann', 'head');
+        list.forEach((r) => print(pad(r.id, 5) + pad(r.name || '–', 16) + pad(r.email, 32) + api.ago(r.created_at)));
+        dim('Einmal-Passwort erstellen: „einmalpasswort <email>“.');
+      }],
+      einmalpasswort: ['<email>', 'Einmal-Passwort setzen und kopieren', async (args) => {
+        const email = (args[0] || '').trim();
+        if (!/^[^\s@]+@[^\s@]+$/.test(email)) return err('So geht es: „einmalpasswort name@beispiel.de“.');
+        const r = await api.resetPassword(email);
+        ok(`Einmal-Passwort für ${r.name || r.email}: ${r.password}`);
+        if (await api.copyText(r.password)) dim('Ist in der Zwischenablage. Persönlich oder per WhatsApp weitergeben; nach dem Anmelden muss ein neues Passwort gesetzt werden.');
+      }],
       statistik: ['', 'Zahlen auf einen Blick', async () => {
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const q = (t, f) => { let x = api.db().from(t).select('*', { count: 'exact', head: true }); return f ? f(x) : x; };

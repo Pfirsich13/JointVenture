@@ -73,7 +73,22 @@
       n.onclick = () => { window.focus(); Admin.api.goTab('reports'); n.close(); };
     }
   }
-  function startWatch() { stopWatch(); checkReports(); watchTimer = setInterval(checkReports, 60000); }
+  const LAST_PW = 'jv_app_last_pwreq';
+  async function checkPwRequests() {
+    if (mode !== 'admin') return;
+    const { data, error } = await Auth.client().from('password_requests').select('id,name,email').eq('status', 'offen').order('id', { ascending: false }).limit(20);
+    if (error) return;
+    const last = Number(localStorage.getItem(LAST_PW) || 0), fresh = data.filter((r) => r.id > last);
+    if (data.length) localStorage.setItem(LAST_PW, String(Math.max(last, data[0].id)));
+    if (!last || !fresh.length) return;
+    const text = `${fresh[0].name || fresh[0].email} hat das Passwort vergessen`;
+    toast(text); if (window.Admin && Admin.api) Admin.api.updateBadge();
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification('Passwort-Anfrage', { body: text, icon: 'admin-192.png', tag: 'jv-pw' });
+      n.onclick = () => { window.focus(); Admin.api.goTab('players'); n.close(); };
+    }
+  }
+  function startWatch() { stopWatch(); const tick = () => { checkReports(); checkPwRequests(); }; tick(); watchTimer = setInterval(tick, 60000); }
   function stopWatch() { clearInterval(watchTimer); watchTimer = 0; }
   function setupNotify() {
     const b = $('#notifBtn');
