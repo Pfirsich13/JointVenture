@@ -11,11 +11,13 @@
    Auth.signUp(name, mail, pw) / Auth.signIn(mail, pw) / Auth.signOut()
    Auth.saveResult({game, mode, won, score, opponent})
    Auth.loadResults()    -> Liste der eigenen Ergebnisse (neueste zuerst)
+   Auth.isAdmin()        -> true für Admins (dürfen die Seite bearbeiten)
+   Auth.client()         -> Supabase-Verbindung (für Inhalte und Admin-Panel)
    ========================================================================= */
 (function () {
   const S = window.SITE || {};
   const configured = !!(S.supabaseUrl && S.supabaseKey);
-  let client = null, user = null, profileName = '', failed = false;
+  let client = null, user = null, profileName = '', role = 'player', failed = false;
   const listeners = [];
   const emit = () => listeners.forEach((fn) => { try { fn(user); } catch (e) { console.error(e); } });
 
@@ -28,13 +30,14 @@
   }
 
   async function loadProfile() {
-    profileName = '';
+    profileName = ''; role = 'player';
     if (!user) return;
     profileName = (user.user_metadata && user.user_metadata.name) || '';
     try {
-      const { data } = await client.from('profiles').select('name').eq('id', user.id).maybeSingle();
+      const { data } = await client.from('profiles').select('name,role').eq('id', user.id).maybeSingle();
       if (data && data.name) profileName = data.name;
-    } catch (e) { /* Tabelle fehlt noch: Name aus den Metadaten */ }
+      if (data && data.role) role = data.role;
+    } catch (e) { /* Tabelle fehlt: Name aus den Metadaten */ }
   }
 
   async function init() {
@@ -71,14 +74,19 @@
     init,
     user: () => user,
     name: () => profileName,
+    isAdmin: () => !!user && role === 'admin',
+    client: () => client,
+    async rename(name) {
+      need(); if (!user) return;
+      const { error } = await client.from('profiles').update({ name }).eq('id', user.id);
+      if (error) throw new Error(deErr(error));
+      profileName = name; emit();
+    },
     onChange(fn) { listeners.push(fn); },
     async signUp(name, email, password) {
       need();
       const { data, error } = await client.auth.signUp({ email, password, options: { data: { name }, emailRedirectTo: location.origin + location.pathname } });
       if (error) throw new Error(deErr(error));
-      if (data.user && data.session) {
-        try { await client.from('profiles').upsert({ id: data.user.id, name }); } catch (e) { }
-      }
       return { needsConfirm: !data.session };
     },
     async signIn(email, password) {

@@ -26,16 +26,28 @@
       <nav class="links" aria-label="Bereiche">
         <a href="#spiele">Spiele</a><a href="#stand">Spielstände</a><a href="#arbeit">In Arbeit</a>
       </nav>
+      <a class="admin-link" id="adminLink" href="#admin" hidden>Admin</a>
       <button class="acct" id="acctBtn" type="button"><span class="av" id="acctAv" aria-hidden="true">?</span><span id="acctTxt">Anmelden</span></button>
     </div>
   </header>
 
-  <main>
+  <div class="banner" id="banner" hidden><div class="wrap" id="bannerTxt"></div></div>
+
+  <section class="maint wrap" id="maint" hidden>
+    <div class="panel">
+      <h2>Wartungsarbeiten</h2>
+      <p id="maintTxt"></p>
+    </div>
+  </section>
+
+  <div id="adminView" hidden></div>
+
+  <main id="mainView">
     <section class="hero wrap">
       <div class="hero-txt">
-        <p class="kicker">Nur für uns zwei</p>
+        <p class="kicker" id="kicker">Nur für uns zwei</p>
         <h1 id="tagline">Zockt gegeneinander. Live.</h1>
-        <p class="lead">Spiel wählen, Code teilen, loslegen. Jedes Duell wird gezählt, und wer verliert, fordert Revanche.</p>
+        <p class="lead" id="lead">Spiel wählen, Code teilen, loslegen. Jedes Duell wird gezählt, und wer verliert, fordert Revanche.</p>
         <div class="actions">
           <button class="btn primary" id="playMain" type="button">Air-Hockey spielen</button>
           <button class="btn" id="playBot" type="button">Gegen Bot üben</button>
@@ -54,7 +66,7 @@
     </section>
 
     <section class="wrap block" id="spiele" aria-labelledby="hSpiele">
-      <div class="block-head"><h2 id="hSpiele">Spiele</h2><p>Tippen und loslegen.</p></div>
+      <div class="block-head"><h2 id="hSpiele">Spiele</h2><p id="gamesHint">Tippen und loslegen.</p></div>
       <div class="games" id="games"></div>
     </section>
 
@@ -64,11 +76,11 @@
     </section>
 
     <section class="wrap block" id="arbeit" aria-labelledby="hArbeit">
-      <div class="block-head"><h2 id="hArbeit">In Arbeit</h2><p>Woran wir gerade bauen.</p></div>
+      <div class="block-head"><h2 id="hArbeit">In Arbeit</h2><p id="projectsHint">Woran wir gerade bauen.</p></div>
       <div class="projects" id="projects"></div>
     </section>
 
-    <footer class="wrap foot"><span class="site-name">JointVenture</span><span>Online-Spiele verbinden eure Handys direkt miteinander.</span></footer>
+    <footer class="wrap foot"><span class="site-name">JointVenture</span><span id="footerTxt">Online-Spiele verbinden eure Handys direkt miteinander.</span></footer>
   </main>
 </div>
 
@@ -77,7 +89,9 @@
 <script src="js/config.js"></script>
 <script src="js/net.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/content.js"></script>
 <script src="js/games/airhockey.js"></script>
+<script src="js/admin.js"></script>
 <script src="js/hub.js"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 /* =========================================================================
    hub.js – Startseite: Spiele, Spielstände, Projekte, Anmeldung
-   Neues Spiel: unten in GAMES eintragen und ein Modul window.Games.<id>
-   mit start(el, hub) und stop() bereitstellen.
-   Neues Projekt: unten in PROJECTS eintragen (p = Fortschritt in Prozent).
+   Texte, Spiele und Projekte kommen aus content.js (Admin-Panel).
+   Eingebautes Spiel: Modul window.Games.<id> mit start(el, hub) und stop().
+   Hochgeladenes Spiel: eine HTML-Datei, läuft abgeschirmt in einem Rahmen.
    ========================================================================= */
 (function () {
   const SITE = window.SITE || { name: 'JointVenture' };
@@ -19,22 +19,15 @@
     zombie: `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14201a"/><stop offset="1" stop-color="#0a0d0b"/></linearGradient><radialGradient id="cZm" cx=".82" cy=".22" r=".25"><stop offset="0" stop-color="#e9f3df" stop-opacity=".5"/><stop offset="1" stop-color="#e9f3df" stop-opacity="0"/></radialGradient></defs><rect width="320" height="200" fill="url(#cZ)"/><rect width="320" height="200" fill="url(#cZm)"/><circle cx="262" cy="44" r="16" fill="#e9f3df"/><path d="M0 168q80-16 160 0t160 0V200H0z" fill="#101712"/><g fill="#6f8f5a"><rect x="184" y="94" width="26" height="34" rx="7"/><rect x="236" y="104" width="24" height="30" rx="7"/></g><g fill="#3b3352"><rect x="187" y="126" width="20" height="38" rx="5"/><rect x="239" y="132" width="18" height="34" rx="5"/></g><path d="M184 108h-20M210 108h18M236 116h-16" stroke="#6f8f5a" stroke-width="6" stroke-linecap="round"/><g fill="#ff4d5e"><circle cx="193" cy="106" r="2.5"/><circle cx="202" cy="106" r="2.5"/><circle cx="244" cy="115" r="2.5"/><circle cx="252" cy="115" r="2.5"/></g><rect x="48" y="104" width="26" height="34" rx="7" fill="#4c7dff"/><rect x="72" y="116" width="26" height="7" rx="3" fill="#cfd5e3"/><path d="M104 119l18-6v12z" fill="#ffd27a"/><path d="M126 119h40" stroke="#ffd27a" stroke-width="3" stroke-dasharray="5 6" opacity=".8"/></svg>`
   };
 
-  const GAMES = [
-    { id: 'airhockey', title: 'Air-Hockey', live: true, desc: 'Schnell, laut, gemein. Wer zuerst 7 Tore hat, gewinnt.' },
-    { id: 'reaction', title: 'Reaktionsduell', desc: 'Warte aufs Signal und tippe schneller als der andere.' },
-    { id: 'bomber', title: 'Mini-Bomber', desc: 'Bomben legen, Wände sprengen, den anderen erwischen.' },
-    { id: 'arena', title: 'Arena-PvP', desc: 'Das 3D-Kampfspiel aus dem Projekt deines Bruders.' },
-    { id: 'zombie', title: 'Zombie-Shooter', desc: 'Welle um Welle gegen Horden, allein oder zusammen.' }
-  ];
-
-  /* Projekte, an denen gerade gebaut wird (p = Fortschritt in %) */
-  const PROJECTS = [
-    { t: 'Anmeldung & Spielstände', who: 'Ron', p: 90, s: 'Supabase verbunden, Tabellen stehen', n: 'Auf beiden Handys registrieren und testen' },
-    { t: 'Arena-PvP', who: 'Bruder', p: 25, s: 'Prototyp mit Würfeln läuft', n: 'Thema wählen: Gladiatoren, Mechs oder Magier' },
-    { t: 'Reaktionsduell', who: 'Ron', p: 5, s: 'Geplant', n: 'Als nächstes Spiel bauen' },
-    { t: 'Mini-Bomber', who: 'offen', p: 0, s: 'Idee', n: 'Regeln und Karte festlegen' },
-    { t: 'Zombie-Shooter (PvE)', who: 'offen', p: 0, s: 'Idee', n: 'Für viele Spieler später eigener Server' }
-  ];
+  const C = () => Content.get();
+  const isAdmin = () => !!(window.Auth && Auth.isAdmin());
+  const allGames = () => C().games || [];
+  const visibleGames = () => allGames().filter((g) => g.status !== 'hidden' || isAdmin());
+  const findGame = (id) => allGames().find((g) => g.id === id);
+  // Kann man das Spiel starten? (eingebautes Modul oder hochgeladene Datei)
+  const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (g.status === 'hidden' && isAdmin()))
+    && ((g.kind === 'builtin' && window.Games && window.Games[g.id]) || (g.kind === 'upload' && g.file_path));
+  const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'] };
 
   /* ---------- Speicher auf diesem Gerät ---------- */
   const KEY = 'duellhalle_v1';
@@ -65,31 +58,62 @@
   window.Hub = hub;
 
   /* ---------- Darstellung ---------- */
-  function applyName() {
-    document.title = SITE.name;
-    document.querySelectorAll('.site-name').forEach((n) => { n.textContent = SITE.name; });
-    if (SITE.tagline) $('#tagline').textContent = SITE.tagline;
+  function applyContent() {
+    const site = C().site || {};
+    const name = site.name || SITE.name;
+    document.title = name;
+    document.querySelectorAll('.site-name').forEach((n) => { n.textContent = name; });
+    const set = (id, v) => { const el = $(id); if (el && v != null) el.textContent = v; };
+    set('#kicker', site.kicker); set('#tagline', site.tagline); set('#lead', site.lead);
+    set('#gamesHint', site.gamesHint); set('#projectsHint', site.projectsHint); set('#footerTxt', site.footer);
+    // Ankündigung
+    const a = C().announcement || {};
+    $('#banner').hidden = !(a.on && a.text);
+    $('#bannerTxt').textContent = a.text || '';
+    // Wartungsmodus: Admins sehen die Seite trotzdem
+    const m = C().maintenance || {};
+    const blocked = !!m.on && !isAdmin();
+    $('#maint').hidden = !blocked;
+    $('#maintTxt').textContent = m.text || 'Wir bauen gerade um.';
+    $('#mainView').classList.toggle('blocked', blocked);
+    $('#adminLink').hidden = !isAdmin();
+    if (m.on && isAdmin()) { $('#banner').hidden = false; $('#bannerTxt').textContent = 'Wartungsmodus ist an. Nur Admins sehen die Seite.' + (a.on && a.text ? ' · ' + a.text : ''); }
+  }
+  function coverFor(g) {
+    if (COVER[g.id]) return COVER[g.id];
+    if (g.cover_path) return `<img src="${esc(Content.fileUrl(g.cover_path, g.updated_at))}" alt="" loading="lazy">`;
+    const hue = [...g.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
+    return `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cg-${esc(g.id)}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 60% 28%)"/><stop offset="1" stop-color="#0d0e12"/></linearGradient></defs><rect width="320" height="200" fill="url(#cg-${esc(g.id)})"/><text x="160" y="122" text-anchor="middle" font-family="Sora, sans-serif" font-weight="800" font-size="64" fill="rgba(255,255,255,.85)">${esc((g.title || '?').slice(0, 2).toUpperCase())}</text></svg>`;
   }
   function renderGames() {
-    $('#games').innerHTML = GAMES.map((g) => `
-      <button class="game ${g.live ? '' : 'soon'}" type="button" data-id="${g.id}">
-        <span class="cover" aria-hidden="true">${COVER[g.id] || ''}</span>
+    const list = visibleGames();
+    $('#games').innerHTML = list.length ? list.map((g) => {
+      const [label, cls] = STATUS[g.status] || STATUS.soon;
+      return `
+      <button class="game ${playable(g) ? '' : 'soon'} ${g.status === 'hidden' ? 'hidden-game' : ''}" type="button" data-id="${esc(g.id)}">
+        <span class="cover" aria-hidden="true">${coverFor(g)}</span>
         <span class="meta">
-          <span class="t"><b>${esc(g.title)}</b><span class="pill ${g.live ? 'ok' : ''}">${g.live ? 'Spielbar' : 'Bald'}</span></span>
-          <span class="d">${esc(g.desc)}</span>
+          <span class="t"><b>${esc(g.title)}</b><span class="pill ${cls}">${label}${g.version && g.status !== 'soon' ? ' ' + esc(g.version) : ''}</span></span>
+          <span class="d">${esc(g.description || '')}</span>
         </span>
-      </button>`).join('');
+      </button>`;
+    }).join('') : '<p class="empty">Noch keine Spiele.</p>';
   }
   function renderProjects() {
-    $('#projects').innerHTML = PROJECTS.map((p) => `
+    const list = C().projects || [];
+    $('#projects').innerHTML = list.length ? list.map((p) => {
+      const pr = Math.max(0, Math.min(100, Number(p.progress) || 0));
+      return `
       <article class="proj">
-        <div class="t"><b>${esc(p.t)}</b><span class="who">${esc(p.who)}</span></div>
-        <div class="bar" role="progressbar" aria-valuenow="${p.p}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.max(2, p.p)}%"></i></div>
-        <div class="row"><span>${esc(p.s)}</span><span>${p.p} %</span></div>
-        <div class="next">Nächster Schritt: ${esc(p.n)}</div>
-      </article>`).join('');
+        <div class="t"><b>${esc(p.title)}</b>${p.owner ? `<span class="who">${esc(p.owner)}</span>` : ''}</div>
+        <div class="bar" role="progressbar" aria-valuenow="${pr}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.max(2, pr)}%"></i></div>
+        <div class="row"><span>${esc(p.status || '')}</span><span>${pr} %</span></div>
+        ${p.next_step ? `<div class="next">Nächster Schritt: ${esc(p.next_step)}</div>` : ''}
+      </article>`;
+    }).join('') : '<p class="empty">Gerade keine Projekte.</p>';
   }
-  const gameTitle = (id) => (GAMES.find((g) => g.id === id) || { title: id }).title;
+  function renderContent() { applyContent(); renderGames(); renderProjects(); }
+  const gameTitle = (id) => (findGame(id) || { title: id }).title;
   function ago(t) {
     const m = Math.round((Date.now() - t) / 60000);
     if (m < 1) return 'gerade eben'; if (m < 60) return `vor ${m} Min.`;
@@ -108,7 +132,7 @@
     const canLogin = window.Auth && Auth.ready;
     $('#tMe').textContent = w; $('#tOp').textContent = l;
     $('#tMeName').textContent = hub.getName(); $('#tOpName').textContent = store.opp || 'Gegner';
-    $('#standHint').textContent = signedIn ? `Gespeichert in deinem Konto, ${hub.getName()}.` : 'Auf diesem Gerät gespeichert.';
+    $('#standHint').textContent = (C().site && C().site.standHint) || (signedIn ? `Gespeichert in deinem Konto, ${hub.getName()}.` : 'Auf diesem Gerät gespeichert.');
     const rate = w + l ? Math.round((w / (w + l)) * 100) : 0;
     const loginBox = signedIn ? '' : `<div class="login-cta"><span>${canLogin ? 'Melde dich an, damit deine Spielstände auf jedem Gerät da sind.' : 'Anmeldung kommt in Kürze. Bis dahin zählt dieses Gerät mit.'}</span>${canLogin ? '<button class="btn primary" type="button" data-login>Anmelden</button>' : ''}</div>`;
     const recent = list.slice(0, 8);
@@ -245,18 +269,47 @@
     return { pause, resume };
   })();
 
-  /* ---------- Umschalten zwischen Startseite und Spiel ---------- */
+  /* ---------- Hochgeladenes Spiel abspielen (abgeschirmter Rahmen) ---------- */
+  const uploadPlayer = {
+    start(el, g) {
+      el.innerHTML = `<div class="g-top"><button class="g-back" type="button">Zurück</button><span class="g-net">${esc(g.title)}${g.status === 'beta' ? ' · Beta' : ''}${g.version ? ' · ' + esc(g.version) : ''}</span></div>
+        <iframe class="upframe" title="${esc(g.title)}" sandbox="allow-scripts allow-pointer-lock allow-popups allow-forms allow-modals" allow="fullscreen; autoplay; gamepad"></iframe>
+        <div class="g-panel" id="upLoad"><div class="box"><h2>Lädt …</h2><div class="wait"><i></i><i></i><i></i></div></div></div>`;
+      el.querySelector('.g-back').onclick = () => hub.back();
+      const frame = el.querySelector('iframe');
+      fetch(Content.fileUrl(g.file_path, g.updated_at))
+        .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then((html) => { frame.srcdoc = html; el.querySelector('#upLoad').remove(); })
+        .catch(() => { el.querySelector('#upLoad .box').innerHTML = '<h2>Ups</h2><p>Das Spiel konnte nicht geladen werden. Internet prüfen und nochmal versuchen.</p><button class="btn" type="button" data-b>Zurück</button>'; el.querySelector('[data-b]').onclick = () => hub.back(); });
+    },
+    stop() { }
+  };
+
+  /* ---------- Umschalten: Startseite, Spiel, Admin ---------- */
   let current = null;
   function route() {
     const id = location.hash.slice(1);
-    const game = GAMES.find((g) => g.id === id && g.live);
-    const mod = game && window.Games && window.Games[id];
-    if (current && (!mod || current !== mod)) { try { current.stop(); } catch (e) { console.error(e); } current = null; $('#game').innerHTML = ''; }
+    if (id === 'admin') {
+      if (current) { try { current.stop(); } catch (e) { } current = null; $('#game').innerHTML = ''; }
+      $('#game').hidden = true; $('#hub').hidden = false; demo.pause();
+      if (isAdmin() && window.Admin) {
+        $('#mainView').hidden = true; $('#maint').hidden = true; $('#adminView').hidden = false;
+        Admin.render($('#adminView'), { refresh: () => Content.load(), toast });
+      } else if (window.Auth && Auth.ready && !Auth.user()) {
+        $('#adminView').hidden = true; $('#mainView').hidden = false; openAccount();
+      } else { history.replaceState(null, '', location.pathname + location.search); route(); }
+      scrollTo(0, 0);
+      return;
+    }
+    $('#adminView').hidden = true; $('#mainView').hidden = false;
+    const g = findGame(id);
+    const mod = g && playable(g) ? (g.kind === 'builtin' ? window.Games[g.id] : { start: (el) => uploadPlayer.start(el, g), stop() { } }) : null;
+    if (current && (!mod || current.id !== id)) { try { current.mod.stop(); } catch (e) { console.error(e); } current = null; $('#game').innerHTML = ''; }
     if (mod) {
       $('#hub').hidden = true; $('#game').hidden = false; demo.pause();
-      if (!current) { current = mod; mod.start($('#game'), hub); hub.intent = null; }
+      if (!current) { current = { id, mod }; mod.start($('#game'), hub); hub.intent = null; }
     } else {
-      $('#game').hidden = true; $('#hub').hidden = false; renderAll(); demo.resume();
+      $('#game').hidden = true; $('#hub').hidden = false; renderAll(); applyContent(); demo.resume();
     }
   }
   function open(id, intent) { hub.intent = intent || null; location.hash = id; }
@@ -269,11 +322,11 @@
   }
 
   /* ---------- Start ---------- */
-  applyName(); renderGames(); renderProjects(); renderAll();
+  renderContent(); renderAll();
   $('#games').addEventListener('click', (e) => {
     const t = e.target.closest('.game'); if (!t) return;
-    const g = GAMES.find((x) => x.id === t.dataset.id);
-    if (g && g.live) open(g.id); else toast(`${g ? g.title : 'Das Spiel'} ist noch in Arbeit.`);
+    const g = findGame(t.dataset.id);
+    if (playable(g)) open(g.id); else toast(`${g ? g.title : 'Das Spiel'} ist noch in Arbeit.`);
   });
   $('#playMain').onclick = () => open('airhockey');
   $('#featureCard').onclick = () => open('airhockey');
@@ -286,7 +339,16 @@
   }));
   $('.brand').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' }); });
   addEventListener('hashchange', route);
-  if (window.Auth) { Auth.onChange(() => refreshCloud()); Auth.init(); }
+  Content.onChange(() => { renderContent(); if (location.hash === '#admin' && !isAdmin()) route(); });
+  if (window.Auth) {
+    let firstAuth = true;
+    Auth.onChange(() => {
+      refreshCloud(); renderContent();
+      if (firstAuth) { firstAuth = false; Content.load().then(() => { if (location.hash) route(); }); }
+      else if (location.hash === '#admin') route();
+    });
+    Auth.init();
+  }
   route();
   if (!store.name && !(window.Auth && Auth.ready) && !location.hash) askName(true);
 })();

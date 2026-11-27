@@ -12,6 +12,8 @@ Unsere private PvP-Spieleseite (JointVenture): Startseite mit Spielekacheln, Ech
 | `css/style.css` | Design |
 | `js/config.js` | Name der Seite und Supabase-Zugang |
 | `js/auth.js` | Anmeldung und gespeicherte Spielstände (Supabase) |
+| `js/content.js` | Texte, Spiele, Projekte aus der Datenbank (mit Standardwerten) |
+| `js/admin.js` | Admin-Panel (Adresse `#admin`, nur für Admins) |
 | `js/net.js` | Echtzeit-Verbindung (Peer-to-Peer über PeerJS, oder Claude-Raum) |
 | `js/hub.js` | Kacheln, Filter, Duell-Bilanz – neue Spiele hier eintragen |
 | `js/games/airhockey.js` | Air-Hockey (Werte ganz oben im Code) |
