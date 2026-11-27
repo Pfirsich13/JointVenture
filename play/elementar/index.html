@@ -56,6 +56,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1420;color:var(--in
 .big.alt{background:#e9eef5;color:#121820}
 .help{margin-top:12px;font-size:13.5px;text-align:left;background:#0006;border-radius:12px;padding:10px 14px}
 .help p{margin:4px 0}
+#chars{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 10px}
+.ch{border:2px solid #fff3;border-radius:12px;background:#0006;color:inherit;padding:10px 4px;cursor:pointer;font:700 15px system-ui}
+.ch small{display:block;font-weight:500;font-size:11px;opacity:.8;margin-top:3px;line-height:1.2}
+.ch[aria-pressed=true]{border-color:var(--c);background:color-mix(in srgb,var(--c) 22%,#0008)}
+.ch i{display:block;width:26px;height:26px;border-radius:50%;margin:0 auto 5px;background:var(--c);box-shadow:0 0 14px var(--c)}
 #note{min-height:18px;font-size:13px;opacity:.85;margin-top:6px}
 #settings{display:none;z-index:20}#settings.show{display:grid}
 #settings .card{background:rgba(16,24,36,.96);border:1px solid #fff2;border-radius:16px;padding:16px 18px;text-align:left}
@@ -101,15 +106,17 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1420;color:var(--in
   <div class="card">
     <h1>Elementar-Arena</h1>
     <div class="sub">Schnee, Magie und schnelles Movement. Wer zuerst 2 Runden gewinnt.</div>
+    <div id="chars"></div>
     <button class="big" id="duelBtn">Duell gegen Bot</button>
     <button class="big alt" id="trainBtn">Training (Gegner wehrt sich nicht)</button>
     <button class="big alt" id="setBtn">Einstellungen</button>
     <button class="big alt" id="jvBack" hidden>Zurück zu JointVenture</button>
     <div id="note"></div>
     <div class="help">
-      <p><b>PC:</b> Klick ins Bild = Maus fangen. WASD laufen, Maus umsehen, Shift Sprint, Leertaste Sprung (2× = Doppelsprung), C Slide, Q Dash, Linksklick Angriff (3er-Kombo), Rechtsklick Block, 1–5 Fähigkeiten, Esc Menü.</p>
+      <p><b>PC:</b> Klick ins Bild = Maus fangen. WASD laufen, Maus umsehen, Shift Sprint, Leertaste Sprung (2× = Doppelsprung), C Slide, Q Dash, Linksklick Angriff (3er-Kombo), Rechtsklick Block, 1–4 Attacken, Esc Menü.</p>
       <p><b>Handy:</b> links ziehen = laufen (ganz drücken = sprinten), rechts wischen = umsehen, Knöpfe rechts.</p>
-      <p><b>Kombos:</b> Wasser macht <b>nass</b>. Nass + Blitz = doppelter Schaden und betäubt. Nass + Böe = unterkühlt, nochmal = eingefroren. Wasser löscht Feuer. <b>Perfekter Dash:</b> im letzten Moment ausweichen = kein Schaden und +20 Mana.</p>
+      <p><b>Charaktere:</b> Feuer, Wasser, Erde oder Luft, jeder mit 4 Attacken. Der Bot nimmt ein anderes Element.</p>
+      <p><b>Kombos:</b> Wasser macht <b>nass</b>. Nass + Blitz = doppelter Schaden und betäubt. Nass + Luft oder Eissplitter = unterkühlt, nochmal = eingefroren. Luft facht Feuer an. Erde macht schwer (langsam, kein Dash). Wasser löscht Feuer. <b>Perfekter Dash:</b> im letzten Moment ausweichen = kein Schaden und +20 Mana.</p>
     </div>
   </div>
 </div>
@@ -142,13 +149,30 @@ const MOVE={walk:6.2,sprint:10.5,crouch:4.2,block:3.2,accelGround:14,accelAir:5,
   slideTime:.7,slideBoost:15,dashTime:.19,dashSpeed:26,dashCd:1.3,stepUp:.45,radius:.35,stand:1.8,low:.9};
 const VITALS={hp:100,mana:100,manaRegen:11};
 const MELEE={range:2.5,cone:.45,dmg:[9,9,15],time:[.36,.36,.5],knock:[2,2,7],comboWindow:1.0};
-const SKILLS=[
-  {id:'fire', name:'Feuerball', key:'1',color:0xff6a2a,css:'#ff7a3a',mana:20,cd:1.2},
-  {id:'water',name:'Wasser­strahl',key:'2',color:0x3aa8ff,css:'#4ab4ff',mana:12,cd:.7},
-  {id:'bolt', name:'Ketten­blitz',key:'3',color:0xc9a6ff,css:'#c9a6ff',mana:25,cd:4},
-  {id:'gust', name:'Böe',      key:'4',color:0xdff6ff,css:'#e6f7ff',mana:20,cd:5},
-  {id:'wall', name:'Stein­wand',key:'5',color:0xa08a6a,css:'#b39a72',mana:25,cd:9}
-];
+// 4 Charaktere wie bei Avatar: jeder beherrscht ein Element und hat 4 Attacken (Tasten 1–4)
+// ai: Abstand, in dem der Bot die Attacke benutzt [min,max]
+const CHARS={
+  fire: {name:'Feuer',  color:0xff6a2a,css:'#ff7a3a',desc:'Druck und Schaden: Gegner brennen.',skills:[
+    {id:'fireball',name:'Feuerball',   short:'Ball', mana:18,cd:1.1,ai:[4,30]},
+    {id:'flame',   name:'Flammen­stoß',short:'Stoß',mana:20,cd:3,  ai:[0,5]},
+    {id:'firejump',name:'Feuer­sprung',short:'Sprung',mana:22,cd:6,ai:[3,12]},
+    {id:'bolt',    name:'Blitz',       short:'Blitz',mana:30,cd:6,  ai:[0,24]}]},
+  water:{name:'Wasser', color:0x3aa8ff,css:'#4ab4ff',desc:'Kontrolle: nass machen, unterkühlen, einfrieren.',skills:[
+    {id:'whip',    name:'Wasser­peitsche',short:'Peitsche',mana:14,cd:1.2,ai:[0,5.5]},
+    {id:'shards',  name:'Eis­splitter',short:'Splitter',mana:18,cd:1.8,ai:[4,24]},
+    {id:'icewall', name:'Eiswand',     short:'Wand', mana:22,cd:8,  ai:[6,30]},
+    {id:'iceride', name:'Eisbahn',     short:'Bahn', mana:20,cd:7,  ai:[10,40]}]},
+  earth:{name:'Erde',   color:0xb08a5a,css:'#c49a62',desc:'Wucht und Deckung: harte, langsame Treffer.',skills:[
+    {id:'boulder', name:'Fels­brocken',short:'Fels', mana:20,cd:1.6,ai:[4,26]},
+    {id:'spikes',  name:'Erd­stacheln',short:'Stacheln',mana:22,cd:3.5,ai:[2,11]},
+    {id:'pillar',  name:'Stein­säule',short:'Säule',mana:20,cd:5,ai:[3,16]},
+    {id:'quake',   name:'Erdbeben',    short:'Beben',mana:30,cd:7,  ai:[0,4.5]}]},
+  air:  {name:'Luft',   color:0xdff6ff,css:'#e6f7ff',desc:'Beweglichkeit: wegstoßen, fliegen, Wirbelsturm.',skills:[
+    {id:'blade',   name:'Wind­klinge',short:'Klinge',mana:12,cd:.8,ai:[3,30]},
+    {id:'gust',    name:'Böe',         short:'Böe',  mana:18,cd:3.5,ai:[0,7]},
+    {id:'updraft', name:'Aufwind',     short:'Aufwind',mana:15,cd:5,ai:[0,3]},
+    {id:'tornado', name:'Wirbel­sturm',short:'Wirbel',mana:30,cd:8,ai:[3,14]}]}
+};
 const ARENA={x:28,z:19};
 
 /* ===== Einstellungen ===== */
@@ -196,7 +220,8 @@ const MAT={
   wood:new THREE.MeshStandardMaterial({map:woodTex,roughness:.8}),
   metal:new THREE.MeshStandardMaterial({color:0x8d9399,roughness:.45,metalness:.6}),
   dark:new THREE.MeshStandardMaterial({color:0x3a3f46,roughness:.7}),
-  ice:new THREE.MeshStandardMaterial({color:0x9fd4ff,roughness:.08,metalness:.1,transparent:true,opacity:.75})
+  ice:new THREE.MeshStandardMaterial({color:0x9fd4ff,roughness:.08,metalness:.1,transparent:true,opacity:.75}),
+  rock:new THREE.MeshStandardMaterial({color:0x7a6a58,roughness:.95,flatShading:true})
 };
 
 /* ===== Arena: Boden, Deckungen, Ebenen, Slide-Tunnel ===== */
@@ -267,8 +292,8 @@ function advanceAxis(p,ax,d){
   if(!obstructed(nx,y,nz,p.h,MOVE.radius,step)){p.x=nx;p.z=nz;p.y=y}
 }
 function physics(p,dx,dz,dt){
-  p.vy-=MOVE.gravity*dt;const next=p.y+p.vy*dt,sup=groundAt(p.x,p.z,p.y,.06);
-  if(p.vy<=0&&next<=sup){if(!p.grounded&&p.vy<-6)landFx(p);p.y=sup;p.vy=0;p.grounded=true;p.jumps=0}
+  p.vy-=MOVE.gravity*dt*(p.glide>now&&p.vy<0?.3:1);if(p.glide>now&&p.vy<-3)p.vy=-3;const next=p.y+p.vy*dt,sup=groundAt(p.x,p.z,p.y,.06);
+  if(p.vy<=0&&next<=sup){if(!p.grounded&&p.vy<-6)landFx(p);if(p.fireLand&&!p.grounded){p.fireLand=false;fireLandBoom(p)}if(p.glide)p.glide=0;p.y=sup;p.vy=0;p.grounded=true;p.jumps=0}
   else if(p.vy>0&&obstructed(p.x,next,p.z,p.h,MOVE.radius,.05)){p.vy=0;p.grounded=false}
   else{p.y=next;p.grounded=false;if(p.jumps===0)p.jumps=1}
   for(let i=0;i<3;i++){advanceAxis(p,'x',dx/3);advanceAxis(p,'z',dz/3)}
@@ -343,13 +368,15 @@ function animateBody(f,dt){
 function fighter(team,name){
   return {team,name,x:0,y:0,z:0,vx:0,vz:0,vy:0,h:MOVE.stand,grounded:true,jumps:0,yaw:0,faceYaw:0,impX:0,impZ:0,
     hp:VITALS.hp,mana:VITALS.mana,slide:0,dash:0,dashCd:0,dir:[0,1],block:false,attackT:0,attackMax:.4,combo:0,comboT:0,castT:0,
-    cds:SKILLS.map(()=>0),st:{wet:0,burn:0,chill:0,chillN:0,frozen:0,stun:0},iframe:0,perfectDone:false,dead:false,flashT:0,body:null,stepT:0,foot:1};
+    cds:[0,0,0,0],skills:[],color:0xffffff,st:{wet:0,burn:0,chill:0,chillN:0,frozen:0,stun:0,heavy:0},iframe:0,perfectDone:false,dead:false,flashT:0,body:null,stepT:0,foot:1};
 }
 const me=fighter(-1,'Du'),foe=fighter(1,'Bot');
 const fighters=[me,foe];
 const other=f=>f===me?foe:me;
 function spawn(f,x,z,yaw){Object.assign(f,{x,y:0,z,vx:0,vz:0,vy:0,h:MOVE.stand,grounded:true,yaw,faceYaw:yaw,impX:0,impZ:0,hp:VITALS.hp,mana:VITALS.mana,
-  slide:0,dash:0,dashCd:0,block:false,attackT:0,combo:0,comboT:0,castT:0,dead:false,iframe:0});f.cds=SKILLS.map(()=>0);for(const k in f.st)f.st[k]=0;}
+  slide:0,dash:0,dashCd:0,block:false,attackT:0,combo:0,comboT:0,castT:0,dead:false,iframe:0});f.cds=[0,0,0,0];f.glide=0;f.fireLand=false;for(const k in f.st)f.st[k]=0;}
+function setChar(f,key){const C=CHARS[key];f.char=key;f.skills=C.skills;f.color=C.color;f.orbColor=C.color;
+  if(f.body)for(const m of f.body.mats){if(!m.userData.base)m.userData.base=m.color.clone();if(!/Visor/.test(m.name))m.color.copy(m.userData.base).lerp(new THREE.Color(C.color),.35)}}
 const canAct=f=>!f.dead&&f.st.frozen<=0&&f.st.stun<=0;
 function jump(f){
   if(!canAct(f))return;
@@ -360,18 +387,19 @@ function jump(f){
   }
 }
 function startSlide(f,mx,mz){if(!canAct(f)||!f.grounded||f.h<1.5||len2(mx,mz)<.2)return;const l=len2(mx,mz);f.slide=MOVE.slideTime;f.h=MOVE.low;f.dir=[mx/l,mz/l];puff(f.x,.1,f.z,0xffffff,10,2)}
-function startDash(f,mx,mz){if(!canAct(f)||f.dashCd>0)return;const l=len2(mx,mz);f.dir=l>.2?[mx/l,mz/l]:[Math.sin(f.faceYaw),Math.cos(f.faceYaw)];
+function startDash(f,mx,mz){if(!canAct(f)||f.dashCd>0)return;if(f.st.heavy>0){if(f===me)floatText(f,'Zu schwer','#c49a62');return}const l=len2(mx,mz);f.dir=l>.2?[mx/l,mz/l]:[Math.sin(f.faceYaw),Math.cos(f.faceYaw)];
   f.dash=MOVE.dashTime;f.dashCd=MOVE.dashCd;f.iframe=.22;f.perfectDone=false;puff(f.x,f.y+.9,f.z,0xcfe8ff,12,3)}
 // Bewegung pro Bild: mx,mz = gewünschte Richtung in der Welt (Länge 0..1), sprint true/false
 function moveFighter(f,mx,mz,sprint,dt){
   f.dashCd=Math.max(0,f.dashCd-dt);f.slide=Math.max(0,f.slide-dt);f.dash=Math.max(0,f.dash-dt);f.iframe=Math.max(0,f.iframe-dt);
   if(f.slide===0&&f.h<MOVE.stand&&!obstructed(f.x,f.y,f.z,MOVE.stand,MOVE.radius,.05))f.h=MOVE.stand;
   if(!canAct(f)){mx=mz=0}
-  const slow=(f.st.chill>0?.6:1);
+  const slow=(f.st.chill>0?.6:1)*(f.st.heavy>0?.65:1),ice=onIce(f);
   const speed=(f.block?MOVE.block:f.h<1.5?MOVE.crouch:sprint?MOVE.sprint:MOVE.walk)*slow;
   const burst=f.dash>0?MOVE.dashSpeed:f.slide>0?7+f.slide/MOVE.slideTime*MOVE.slideBoost:0;
-  const k=Math.min(1,dt*(f.grounded?MOVE.accelGround:MOVE.accelAir));
-  f.vx+=(mx*speed-f.vx)*k;f.vz+=(mz*speed-f.vz)*k;
+  const k=Math.min(1,dt*(f.grounded?MOVE.accelGround:MOVE.accelAir))*(ice?.35:1);
+  const sp2=speed*(ice?1.8:1);f.vx+=(mx*sp2-f.vx)*k;f.vz+=(mz*sp2-f.vz)*k;
+  if(ice&&len2(mx,mz)>.1&&Math.random()<.4)puff(f.x,.1,f.z,0xcfeeff,1,1,.4);
   const ik=Math.exp(-dt*5);f.impX*=ik;f.impZ*=ik;
   const vx=(burst?f.dir[0]*burst:f.vx)+f.impX,vz=(burst?f.dir[1]*burst:f.vz)+f.impZ;
   if(burst){f.vx=f.dir[0]*Math.min(burst,speed);f.vz=f.dir[1]*Math.min(burst,speed)}
@@ -387,7 +415,7 @@ function moveFighter(f,mx,mz,sprint,dt){
 }
 function tickStates(f,dt){
   const s=f.st;
-  for(const k of ['wet','chill','frozen','stun'])s[k]=Math.max(0,s[k]-dt);
+  for(const k of ['wet','chill','frozen','stun','heavy'])s[k]=Math.max(0,s[k]-dt);
   if(s.chill<=0)s.chillN=0;
   if(s.burn>0){s.burn=Math.max(0,s.burn-dt);f.burnAcc=(f.burnAcc||0)+dt*4;if(f.burnAcc>=1){f.burnAcc-=1;applyDmg(f,1,null,true)}if(Math.random()<.4)puff(f.x,f.y+.6+Math.random(),f.z,0xff8a3a,1,.6)}
   f.mana=Math.min(VITALS.mana,f.mana+VITALS.manaRegen*dt);
@@ -436,83 +464,175 @@ function melee(f){
   },120);
 }
 
-/* ===== Fähigkeiten (Elemente aus der Magier-Arena) ===== */
-const projs=[];
-function aimDir(f){ // Richtung der Fähigkeit: Spieler = Fadenkreuz, Bot = auf den Gegner mit Streuung
+/* ===== Fähigkeiten: 4 Elemente mit je 4 Attacken ===== */
+const projs=[],zones=[],iceStrips=[];
+function aimDir(f){ // Richtung: Spieler = Fadenkreuz, Bot = auf den Gegner mit Streuung
   const from=new THREE.Vector3(f.x+Math.sin(f.faceYaw)*.5,f.y+1.35,f.z+Math.cos(f.faceYaw)*.5);
   let to;
   if(f===me){to=camAimPoint()}
   else{const t=other(f),acc=BOT[SET.bot].aim,sc=(1-acc)*3;to=new THREE.Vector3(t.x+t.vx*.25+(Math.random()-.5)*sc,t.y+1.0+(Math.random()-.5)*sc*.5,t.z+t.vz*.25+(Math.random()-.5)*sc)}
   return {from,dir:to.sub(from).normalize()};
 }
+function inCone(f,t,range,cos){const dx=t.x-f.x,dz=t.z-f.z,d=len2(dx,dz);return !t.dead&&d<range&&Math.abs(t.y-f.y)<2.2&&(Math.sin(f.faceYaw)*dx+Math.cos(f.faceYaw)*dz)/(d||1)>cos}
+// Element-Zustände und Kombos (aus der Magier-Arena)
+function elemHit(t,src,elem){
+  const s=t.st;
+  if(elem==='fire'){if(s.wet>0){s.wet=0;floatText(t,'Dampf','#ddd');puff(t.x,t.y+1.2,t.z,0xeeeeee,18,2)}else{s.burn=3}if(s.frozen>0){s.frozen=0;floatText(t,'Aufgetaut','#ffb07a')}}
+  if(elem==='water'){if(s.burn>0){s.burn=0;floatText(t,'Gelöscht','#bfe6ff');puff(t.x,t.y+1.2,t.z,0xdddddd,16,2)}s.wet=5}
+  if(elem==='ice'){if(s.burn>0){s.burn=0;floatText(t,'Gelöscht','#bfe6ff')}chillUp(t)}
+  if(elem==='air'){if(s.wet>0){s.wet=0;chillUp(t)}if(s.burn>0){s.burn=4;applyDmg(t,6,src,true);floatText(t,'Feuer flammt auf','#ff9a4a')}}
+  if(elem==='earth'){s.heavy=2.5}
+}
+function chillUp(t){const s=t.st;if(s.chill>0||s.chillN>=1){s.frozen=1.6;s.chill=0;s.chillN=0;floatText(t,'Eingefroren!','#9fdcff',true);iceFx(t)}else{s.chill=3;s.chillN=1;floatText(t,'Unterkühlt','#bfe6ff')}}
 function cast(f,i){
-  const S=SKILLS[i];if(!canAct(f)||f.cds[i]>0||f.attackT>0)return false;
+  const S=f.skills[i];if(!S||!canAct(f)||f.cds[i]>0||f.attackT>0)return false;
   if(f.mana<S.mana){if(f===me)floatText(f,'Kein Mana','#8fb8ff');return false}
-  f.mana-=S.mana;f.cds[i]=S.cd;f.castT=.35;f.aimT=.6;f.yaw=f===me?f.yaw:Math.atan2(other(f).x-f.x,other(f).z-f.z);f.faceYaw=f.yaw;f.orbColor=S.color;
-  const {from,dir}=aimDir(f),t=other(f);
-  if(S.id==='fire')shoot(f,from,dir,{speed:30,r:.32,color:S.color,dmg:16,life:1.4,elem:'fire',grav:2});
-  else if(S.id==='water')shoot(f,from,dir,{speed:46,r:.2,color:S.color,dmg:8,life:.9,elem:'water'});
-  else if(S.id==='bolt'){
-    // sicherer Treffer, wenn der Gegner im Zielbereich ist
+  const t=other(f);
+  if(f!==me)f.yaw=Math.atan2(t.x-f.x,t.z-f.z);
+  f.faceYaw=f.yaw;f.castT=.35;f.aimT=.6;f.orbColor=f.color;
+  const {from,dir}=aimDir(f);
+  const ok=SKILL_FN[S.id](f,t,from,dir);
+  if(ok===false)return false;
+  f.mana-=S.mana;f.cds[i]=S.cd;return true;
+}
+function groundPoint(f,dist){const x=clamp(f.x+Math.sin(f.faceYaw)*dist,-ARENA.x+1,ARENA.x-1),z=clamp(f.z+Math.cos(f.faceYaw)*dist,-ARENA.z+1,ARENA.z-1);return {x,z,y:groundAt(x,z,f.y+.5,.5,0)}}
+function tempSolid(mesh,x,y,z,w,h,d,yaw,life,o={}){
+  const c=Math.abs(Math.cos(yaw)),s=Math.abs(Math.sin(yaw)),hw=(w*c+d*s)/2,hd=(w*s+d*c)/2;
+  mesh.rotation.y=yaw;mesh.position.set(x,y-h/2,z);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);
+  const sol=Object.assign({x0:x-hw,x1:x+hw,y0:y,y1:y+h,z0:z-hd,z1:z+hd,mesh,temp:true,until:now+life,born:now,y0base:y,hh:h},o);solids.push(sol);return sol;
+}
+const rockGeo=new THREE.IcosahedronGeometry(1,1);
+const SKILL_FN={
+  // ---------- Feuer ----------
+  fireball(f,t,from,dir){shoot(f,from,dir,{speed:30,r:.32,color:0xff6a2a,dmg:15,life:1.4,elem:'fire',grav:2,boom:2.2})},
+  flame(f,t){
+    for(let i=0;i<34;i++){const a=f.faceYaw+(Math.random()-.5)*.8,r=Math.random()*5;puff(f.x+Math.sin(a)*r,f.y+1+Math.random()*.6,f.z+Math.cos(a)*r,i%3?0xff7a2a:0xffd060,1,1.5,.5)}
+    flashLight(new THREE.Vector3(f.x+Math.sin(f.faceYaw)*2,f.y+1.2,f.z+Math.cos(f.faceYaw)*2),0xff7a2a);
+    if(inCone(f,t,5.2,.75)&&hurt(t,f,11,{knock:5}))elemHit(t,f,'fire');
+  },
+  firejump(f){ // hoher Sprung nach vorne, beim Landen Explosion
+    f.vy=12;f.grounded=false;f.jumps=2;f.dash=.3;f.dir=[Math.sin(f.faceYaw),Math.cos(f.faceYaw)];f.fireLand=true;f.iframe=.15;
+    puff(f.x,f.y+.2,f.z,0xff8a3a,24,4);flashLight(new THREE.Vector3(f.x,f.y+.5,f.z),0xff6a2a);
+  },
+  bolt(f,t,from,dir){
     const dx=t.x-f.x,dy=t.y+1-from.y,dz=t.z-f.z,d=Math.hypot(dx,dy,dz),ok=!t.dead&&d<24&&(dir.x*dx+dir.y*dy+dir.z*dz)/d>(f===me?.93:.8)&&lineFree(from,new THREE.Vector3(t.x,t.y+1.1,t.z));
     const end=ok?new THREE.Vector3(t.x,t.y+1.1,t.z):from.clone().addScaledVector(dir,18);
-    boltFx(from,end,S.color);
-    if(ok){if(t.st.wet>0){t.st.wet=0;if(hurt(t,f,28,{knock:2,unblockable:true})){t.st.stun=1;floatText(t,'Nass + Blitz!','#c9a6ff',true)}}else hurt(t,f,14,{knock:2})}
-  }
-  else if(S.id==='gust'){
+    boltFx(from,end,0xc9a6ff);
+    if(ok){if(t.st.wet>0){t.st.wet=0;if(hurt(t,f,32,{knock:2,unblockable:true})){t.st.stun=1.1;floatText(t,'Nass + Blitz!','#c9a6ff',true)}}else hurt(t,f,16,{knock:2})}
+  },
+  // ---------- Wasser ----------
+  whip(f,t){ // Peitsche im Bogen wie im Video
+    const pts=[];for(let i=0;i<=16;i++){const k=i/16,a=f.faceYaw+(k-.5)*1.4,r=1+k*4.2;pts.push(new THREE.Vector3(f.x+Math.sin(a)*r,f.y+1.3-k*.6+Math.sin(k*Math.PI)*.5,f.z+Math.cos(a)*r))}
+    const m=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.16,8),new THREE.MeshStandardMaterial({color:0x6cc4ff,emissive:0x1a5a90,roughness:.1,transparent:true,opacity:.85}));
+    addFx(m,.35,k=>{m.material.opacity=.85*(1-k)});
+    for(const p of pts)if(Math.random()<.5)puff(p.x,p.y,p.z,0x9fdcff,2,1.2,.4);
+    if(inCone(f,t,5.5,.55)&&hurt(t,f,12,{knock:4}))elemHit(t,f,'water');
+  },
+  shards(f,t,from,dir){
+    for(const off of [-.12,0,.12]){const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),off);shoot(f,from.clone(),d,{speed:40,r:.16,color:0xbfe8ff,dmg:6,life:.8,elem:'ice',shape:'shard'})}
+  },
+  icewall(f,t){
+    const p=groundPoint(f,3);if(len2(t.x-p.x,t.z-p.z)<1.8){floatText(f,'Zu nah am Gegner','#ccc');return false}
+    const m=new THREE.Mesh(new THREE.BoxGeometry(4.2,2.8,.6,4,3,1),MAT.ice);tempSolid(m,p.x,p.y,p.z,4.2,2.8,.6,f.faceYaw,6,{ice:true});puff(p.x,p.y+.3,p.z,0xbfe8ff,20,3);
+  },
+  iceride(f){ // Eisbahn zum Drübersurfen: auf dem Eis bist du viel schneller
+    const L=16,w=2.2,yaw=f.faceYaw,cx=f.x+Math.sin(yaw)*L/2,cz=f.z+Math.cos(yaw)*L/2;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(w,L),new THREE.MeshStandardMaterial({color:0xa8dcff,roughness:.05,metalness:.2,transparent:true,opacity:.8}));
+    m.rotation.x=-Math.PI/2;m.rotation.z=yaw;m.position.set(cx,.03,cz);m.receiveShadow=true;scene.add(m);
+    iceStrips.push({x:cx,z:cz,yaw,L,w,until:now+7,mesh:m});f.slide=Math.max(f.slide,.4);f.h=MOVE.low;f.dir=[Math.sin(yaw),Math.cos(yaw)];
+    for(let i=0;i<20;i++)puff(f.x+Math.sin(yaw)*i*.8,.2,f.z+Math.cos(yaw)*i*.8,0xbfe8ff,1,1,.5);
+  },
+  // ---------- Erde ----------
+  boulder(f,t,from,dir){shoot(f,from,dir,{speed:24,r:.42,color:0x8a7356,dmg:20,life:1.6,elem:'earth',grav:5,shape:'rock'})},
+  spikes(f,t){ // Stacheln schießen nacheinander in einer Reihe aus dem Boden
+    const yaw=f.faceYaw;let hit=false;
+    for(let i=1;i<=8;i++)setTimeout(()=>{
+      const x=f.x+Math.sin(yaw)*i*1.4,z=f.z+Math.cos(yaw)*i*1.4;if(Math.abs(x)>ARENA.x||Math.abs(z)>ARENA.z||pointSolid(x,.5,z))return;
+      const s=new THREE.Mesh(new THREE.ConeGeometry(.45,1.8,6),MAT.rock);s.position.set(x,-.9,z);s.rotation.set((Math.random()-.5)*.4,Math.random()*3,(Math.random()-.5)*.4);s.castShadow=true;
+      addFx(s,1.4,k=>{s.position.y=k<.12?-.9+k/.12*1.8:k>.8?.9-(k-.8)/.2*1.8:.9});puff(x,.2,z,0x8a7356,6,2.5);
+      if(!hit&&!t.dead&&len2(t.x-x,t.z-z)<1.1&&t.y<1.2){hit=true;if(hurt(t,f,14,{lift:9,knock:2}))elemHit(t,f,'earth')}
+    },i*55);
+  },
+  pillar(f,t){ // Steinsäule: Deckung; steht der Gegner darauf, wird er hochgeschleudert
+    let p;
+    if(f===me){const a=camAimPoint();p={x:clamp(a.x,-ARENA.x+1,ARENA.x-1),z:clamp(a.z,-ARENA.z+1,ARENA.z-1)};if(len2(p.x-f.x,p.z-f.z)>16)p=groundPoint(f,8);p.y=groundAt(p.x,p.z,a.y+.3,.3,0)}
+    else p=len2(t.x-f.x,t.z-f.z)<16?{x:t.x,z:t.z,y:t.y}:groundPoint(f,6);
+    if(len2(f.x-p.x,f.z-p.z)<1.2)p=groundPoint(f,2.5);
+    const m=new THREE.Mesh(new THREE.BoxGeometry(1.4,3.2,1.4),MAT.stone);
+    tempSolid(m,p.x,p.y,p.z,1.4,3.2,1.4,0,7);puff(p.x,p.y+.2,p.z,0x8a7356,22,3.5);
+    if(!t.dead&&len2(t.x-p.x,t.z-p.z)<1.1){t.y=p.y+3.25;if(hurt(t,f,10,{lift:7}))elemHit(t,f,'earth')}
+  },
+  quake(f,t){
+    const r=new THREE.Mesh(new THREE.RingGeometry(.5,1,40),new THREE.MeshBasicMaterial({color:0xc49a62,transparent:true,opacity:.6,side:THREE.DoubleSide,depthWrite:false}));
+    r.rotation.x=-Math.PI/2;r.position.set(f.x,f.y+.05,f.z);addFx(r,.5,k=>{r.scale.setScalar(1+k*5);r.material.opacity=.6*(1-k)});shake=.4;
+    for(let i=0;i<30;i++){const a=Math.random()*7,d=Math.random()*5;puff(f.x+Math.sin(a)*d,f.y+.1,f.z+Math.cos(a)*d,0x8a7356,1,3)}
+    if(!t.dead&&len2(t.x-f.x,t.z-f.z)<5&&Math.abs(t.y-f.y)<1.5&&hurt(t,f,12,{lift:4,knock:6,unblockable:true})){if(t.grounded||t.y-f.y<.5){t.st.stun=.8;floatText(t,'Betäubt','#ffd27a')}elemHit(t,f,'earth')}
+  },
+  // ---------- Luft ----------
+  blade(f,t,from,dir){shoot(f,from,dir,{speed:55,r:.2,color:0xe8f8ff,dmg:9,life:.8,elem:'air',shape:'blade'})},
+  gust(f,t,from,dir){
     gustFx(f,dir);
-    const dx=t.x-f.x,dz=t.z-f.z,d=len2(dx,dz);
-    if(!t.dead&&d<7.5&&(Math.sin(f.faceYaw)*dx+Math.cos(f.faceYaw)*dz)/(d||1)>.5){
-      if(hurt(t,f,6,{knock:15,lift:4})){
-        if(t.st.wet>0){t.st.wet=0;t.st.chillN++;if(t.st.chillN>=2||t.st.chill>0){t.st.frozen=1.6;t.st.chill=0;t.st.chillN=0;floatText(t,'Eingefroren!','#9fdcff',true);iceFx(t)}else{t.st.chill=3;floatText(t,'Unterkühlt','#bfe6ff')}}
-      }
-    }
-    // Böe lenkt Geschosse ab
-    for(const p of projs)if(p.owner!==f&&p.pos.distanceTo(new THREE.Vector3(f.x,f.y+1,f.z))<7){p.vel.multiplyScalar(-1);p.owner=f;p.life=1}
+    if(inCone(f,t,7.5,.5)&&hurt(t,f,7,{knock:16,lift:4}))elemHit(t,f,'air');
+    for(const p of projs)if(p.owner!==f&&p.pos.distanceTo(tmpV.set(f.x,f.y+1,f.z))<7){p.vel.multiplyScalar(-1);p.owner=f;p.life=1}
+  },
+  updraft(f){f.vy=13.5;f.grounded=false;f.jumps=1;f.glide=now+2.2;f.iframe=.35;f.perfectDone=true;
+    for(let i=0;i<24;i++){const a=i/24*7;puff(f.x+Math.sin(a)*1.2,f.y+.2,f.z+Math.cos(a)*1.2,0xffffff,1,1)}},
+  tornado(f){
+    const g=new THREE.Group();for(let i=0;i<5;i++){const c=new THREE.Mesh(new THREE.CylinderGeometry(.5+i*.35,.3+i*.35,.7,16,1,true),new THREE.MeshBasicMaterial({color:0xe8f6ff,transparent:true,opacity:.28,side:THREE.DoubleSide,depthWrite:false}));c.position.y=.35+i*.7;g.add(c)}
+    g.position.set(f.x+Math.sin(f.faceYaw)*2,f.y,f.z+Math.cos(f.faceYaw)*2);scene.add(g);
+    zones.push({kind:'tornado',owner:f,g,x:g.position.x,z:g.position.z,dx:Math.sin(f.faceYaw)*6.5,dz:Math.cos(f.faceYaw)*6.5,until:now+3.2,tick:0});
   }
-  else if(S.id==='wall'){
-    const x=f.x+Math.sin(f.faceYaw)*3,z=f.z+Math.cos(f.faceYaw)*3,c=Math.abs(Math.cos(f.faceYaw)),s=Math.abs(Math.sin(f.faceYaw));
-    const w=4,d=.7,hw=(w*c+d*s)/2,hd=(w*s+d*c)/2,y=groundAt(x,z,f.y+.5,.5,0);
-    if(len2(t.x-x,t.z-z)<1.8){f.mana+=S.mana;f.cds[i]=0;floatText(f,'Zu nah am Gegner','#ccc');return false}
-    const m=new THREE.Mesh(new THREE.BoxGeometry(w,2.6,d,6,3,1),MAT.stone);m.rotation.y=f.faceYaw;m.position.set(x,y-1.3,z);m.castShadow=m.receiveShadow=true;scene.add(m);
-    const sol={x0:x-hw,x1:x+hw,y0:y,y1:y+2.6,z0:z-hd,z1:z+hd,mesh:m,temp:true,until:now+6,born:now,y0base:y};solids.push(sol);
-    puff(x,y+.2,z,0xbba98a,20,3);
-  }
-  return true;
-}
+};
 function shoot(f,from,dir,o){
-  const g=new THREE.Group();
-  const core=new THREE.Mesh(new THREE.SphereGeometry(o.r,14,10),new THREE.MeshBasicMaterial({color:o.color}));g.add(core);
-  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:o.color,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));glow.scale.setScalar(o.r*6);g.add(glow);
-  g.position.copy(from);scene.add(g);
-  projs.push(Object.assign({owner:f,pos:from.clone(),vel:dir.clone().multiplyScalar(o.speed),g},o));
+  const g=new THREE.Group();let core;
+  if(o.shape==='rock'){core=new THREE.Mesh(rockGeo,MAT.rock);core.scale.setScalar(o.r);core.castShadow=true}
+  else if(o.shape==='shard'){core=new THREE.Mesh(new THREE.ConeGeometry(o.r,o.r*5,5),new THREE.MeshStandardMaterial({color:o.color,emissive:0x3a7aa0,roughness:.05}));core.rotation.x=Math.PI/2}
+  else if(o.shape==='blade'){core=new THREE.Mesh(new THREE.TorusGeometry(.5,.05,4,16,Math.PI),new THREE.MeshBasicMaterial({color:o.color,transparent:true,opacity:.8}));core.rotation.x=Math.PI/2}
+  else core=new THREE.Mesh(new THREE.SphereGeometry(o.r,14,10),new THREE.MeshBasicMaterial({color:o.color}));
+  g.add(core);
+  if(o.shape!=='rock'){const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:o.color,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));glow.scale.setScalar(o.r*6);g.add(glow)}
+  g.position.copy(from);g.lookAt(from.clone().add(dir));scene.add(g);
+  projs.push(Object.assign({owner:f,pos:from.clone(),vel:dir.clone().multiplyScalar(o.speed),g,core},o));
 }
 function updateProjs(dt){
   for(let i=projs.length-1;i>=0;i--){const p=projs[i];
     p.life-=dt;p.vel.y-=(p.grav||0)*dt;
-    // in kleinen Schritten bewegen, damit schnelle Geschosse nichts überspringen
-    const t=other(p.owner),stepLen=p.vel.length()*dt,n=Math.max(1,Math.ceil(stepLen/.25));let hitT=false,wall=false;
+    const t=other(p.owner),n=Math.max(1,Math.ceil(p.vel.length()*dt/.25));let hitT=false,wall=false;
     for(let k=0;k<n&&!hitT&&!wall;k++){p.pos.addScaledVector(p.vel,dt/n);
       if(!t.dead&&Math.abs(p.pos.y-(t.y+t.h/2))<t.h/2+p.r&&len2(p.pos.x-t.x,p.pos.z-t.z)<.45+p.r)hitT=true;
       else wall=!!pointSolid(p.pos.x,p.pos.y,p.pos.z,p.r*.5)||p.pos.y<0}
-    p.g.position.copy(p.pos);
+    p.g.position.copy(p.pos);if(p.shape==='rock')p.core.rotation.x+=dt*8;if(p.shape==='blade')p.core.rotation.z+=dt*20;
     if(Math.random()<.6)puff(p.pos.x,p.pos.y,p.pos.z,p.color,1,.4,.35);
     if(hitT||wall||p.life<=0){
-      if(hitT&&hurt(t,p.owner,p.dmg,{knock:p.elem==='fire'?4:1.5})){
-        if(p.elem==='fire'){if(t.st.wet>0){t.st.wet=0;floatText(t,'Dampf','#ddd');puff(t.x,t.y+1.2,t.z,0xeeeeee,18,2)}else t.st.burn=3}
-        if(p.elem==='water')setWet(t);
-      }
-      puff(p.pos.x,p.pos.y,p.pos.z,p.color,p.elem==='fire'?22:12,p.elem==='fire'?4:2.5);
+      if(hitT&&hurt(t,p.owner,p.dmg,{knock:p.elem==='earth'?7:p.elem==='fire'?4:p.elem==='air'?5:1.5}))elemHit(t,p.owner,p.elem);
+      else if(p.boom&&!t.dead&&p.pos.distanceTo(tmpV.set(t.x,t.y+.9,t.z))<p.boom&&hurt(t,p.owner,p.dmg*.5,{knock:4}))elemHit(t,p.owner,p.elem); // Feuerball-Explosion
+      puff(p.pos.x,p.pos.y,p.pos.z,p.color,p.elem==='fire'?24:12,p.elem==='fire'?4:2.5);
       if(p.elem==='fire')flashLight(p.pos,p.color);
       scene.remove(p.g);projs.splice(i,1);
     }
   }
 }
+function updateZones(dt){
+  for(let i=zones.length-1;i>=0;i--){const z=zones[i];
+    if(now>z.until){scene.remove(z.g);zones.splice(i,1);continue}
+    const nx=z.x+z.dx*dt,nz=z.z+z.dz*dt;if(!pointSolid(nx,.5,nz)&&Math.abs(nx)<ARENA.x&&Math.abs(nz)<ARENA.z){z.x=nx;z.z=nz}
+    z.g.position.set(z.x,0,z.z);z.g.rotation.y+=dt*9;z.g.children.forEach((c,k)=>c.rotation.y+=dt*(3+k));
+    if(Math.random()<.7)puff(z.x+(Math.random()-.5)*2,Math.random()*3,z.z+(Math.random()-.5)*2,0xffffff,1,2,.5);
+    const t=other(z.owner),d=len2(t.x-z.x,t.z-z.z);
+    if(!t.dead&&d<2.6&&t.iframe<=0){t.impX+=(z.x-t.x)*dt*6;t.impZ+=(z.z-t.z)*dt*6;if(t.vy<3){t.vy=3.5;t.grounded=false}
+      if(now>z.tick){z.tick=now+.45;if(hurt(t,z.owner,5,{}))elemHit(t,z.owner,'air')}}
+  }
+}
+function onIce(f){if(f.y>.1)return false;for(const s of iceStrips){const dx=f.x-s.x,dz=f.z-s.z,a=Math.sin(s.yaw)*dx+Math.cos(s.yaw)*dz,b=Math.cos(s.yaw)*dx-Math.sin(s.yaw)*dz;if(Math.abs(a)<s.L/2&&Math.abs(b)<s.w/2)return s}return null}
+function updateIce(){for(let i=iceStrips.length-1;i>=0;i--){const s=iceStrips[i];if(now>s.until){s.mesh.material.opacity-=.05;if(s.mesh.material.opacity<=0){scene.remove(s.mesh);iceStrips.splice(i,1)}}}}
 function lineFree(a,b){const d=a.distanceTo(b),n=Math.ceil(d/.4);for(let i=1;i<n;i++){const t=i/n;if(pointSolid(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t))return false}return true}
 function updateWalls(){
   for(let i=solids.length-1;i>=baseSolids;i--){const s=solids[i];if(!s.temp)continue;
-    const up=Math.min(1,(now-s.born)/.25);s.mesh.position.y=s.y0base-1.3+2.6*up;
-    if(now>s.until){const k=(now-s.until)/.4;s.mesh.position.y-=k*2.6;if(k>=1){scene.remove(s.mesh);solids.splice(i,1)}}}
+    const up=Math.min(1,(now-s.born)/.2);s.mesh.position.y=s.y0base-s.hh/2+s.hh*up;
+    // steht jemand auf einer wachsenden Säule, wird er mitgehoben
+    if(up<1)for(const f of fighters)if(f.x>s.x0&&f.x<s.x1&&f.z>s.z0&&f.z<s.z1&&f.y<s.y0base+s.hh*up)f.y=s.y0base+s.hh*up;
+    if(now>s.until){if(s.ice){for(let k=0;k<16;k++)puff(s.mesh.position.x+(Math.random()-.5)*3,s.mesh.position.y+(Math.random()-.5)*2,s.mesh.position.z,0xcfeeff,2,4);scene.remove(s.mesh);solids.splice(i,1);continue}
+      const k=(now-s.until)/.4;s.mesh.position.y-=k*s.hh;if(k>=1){scene.remove(s.mesh);solids.splice(i,1)}}}
 }
 
 /* ===== Effekte: Partikel, Blitz, Böe, Licht, Schnee, Fußspuren ===== */
@@ -557,6 +677,8 @@ let lightNext=0;
 function flashLight(p,color){const L=lights[lightNext];lightNext=(lightNext+1)%lights.length;L.l.color.setHex(color);L.l.position.copy(p);L.t=now;L.l.intensity=3}
 function updateLights(){for(const L of lights){const k=(now-L.t)/.35;L.l.intensity=k<1?3*(1-k):0}}
 function landFx(f){puff(f.x,f.y+.1,f.z,0xffffff,10,2.2)}
+function fireLandBoom(f){puff(f.x,f.y+.3,f.z,0xff7a2a,40,6);flashLight(new THREE.Vector3(f.x,f.y+.8,f.z),0xff6a2a);shake=.35;const t=other(f);
+  if(!t.dead&&len2(t.x-f.x,t.z-f.z)<3.4&&Math.abs(t.y-f.y)<2&&hurt(t,f,14,{knock:9,lift:3}))elemHit(t,f,'fire')}
 // fallender Schnee rund um die Kamera
 const SNOW=1600,sGeo=new THREE.BufferGeometry(),sPos=new Float32Array(SNOW*3);
 for(let i=0;i<SNOW;i++){sPos[i*3]=(Math.random()-.5)*50;sPos[i*3+1]=Math.random()*22;sPos[i*3+2]=(Math.random()-.5)*50}
@@ -580,20 +702,18 @@ function botThink(dt){
   if(mode==='train'){b.yaw=Math.atan2(t.x-b.x,t.z-b.z);moveFighter(b,0,0,false,dt);b.hp=Math.min(VITALS.hp,b.hp+dt*4);return}
   const dx=t.x-b.x,dz=t.z-b.z,d=len2(dx,dz)||1;b.yaw=Math.atan2(dx,dz);
   if(now>ai.strafeT){ai.strafe=Math.random()<.5?-1:1;ai.strafeT=now+1+Math.random()*2}
-  // gefährliches Geschoss in der Nähe? -> Dash zur Seite
   for(const p of projs)if(p.owner===t&&p.pos.distanceTo(tmpV.set(b.x,b.y+1,b.z))<5&&Math.random()<dt*6*BOT[SET.bot].aim)startDash(b,-dz/d*ai.strafe,dx/d*ai.strafe);
-  let mx=0,mz=0;const want=d>12?1:d<5?-1:0;
-  mx=dx/d*want+(-dz/d)*ai.strafe*.7;mz=dz/d*want+(dx/d)*ai.strafe*.7;
-  const l=len2(mx,mz)||1;mx/=l;mz/=l;
+  const want=d>12?1:d<5?-1:0;
+  let mx=dx/d*want+(-dz/d)*ai.strafe*.7,mz=dz/d*want+(dx/d)*ai.strafe*.7;const l=len2(mx,mz)||1;mx/=l;mz/=l;
   b.block=false;
   if(now>ai.next&&!t.dead){ai.next=now+BOT[SET.bot].think*(.6+Math.random()*.8);
-    const r=Math.random();
-    if(d<2.6)melee(b);
-    else if(d<6.5&&b.cds[3]<=0&&(t.st.wet>0||r<.3))cast(b,3);
-    else if(t.st.wet>0&&b.cds[2]<=0&&d<20)cast(b,2);
-    else if(r<.45&&b.cds[1]<=0)cast(b,1);
-    else if(r<.8&&b.cds[0]<=0)cast(b,0);
-    else if(t.hp>b.hp&&b.cds[4]<=0&&d>6)cast(b,4);
+    if(d<2.4&&Math.random()<.6)melee(b);
+    else{ // passende Attacke für den Abstand zufällig wählen
+      const opts=b.skills.map((S,i)=>i).filter(i=>b.cds[i]<=0&&b.mana>=b.skills[i].mana&&d>=b.skills[i].ai[0]&&d<=b.skills[i].ai[1]);
+      // Kombos bevorzugen: nass -> Blitz / Böe / Eissplitter
+      const combo=opts.find(i=>t.st.wet>0&&['bolt','gust','shards'].includes(b.skills[i].id));
+      if(combo!==undefined)cast(b,combo);else if(opts.length)cast(b,opts[Math.random()*opts.length|0]);
+    }
   }
   if(canAct(b)&&d<2.6&&t.attackT>0&&Math.random()<.5)b.block=true;
   if(d<2.2){mx*=.2;mz*=.2}
@@ -604,7 +724,7 @@ function botThink(dt){
 
 /* ===== Eingabe: PC (Maus + Tastatur) und Handy (Touch) ===== */
 const keys={},pressed=new Set();let camYaw=0,camPitch=.15,mouseDown=false,touchMove=[0,0],touchSprint=false;
-addEventListener('keydown',e=>{if(!keys[e.code])pressed.add(e.code);keys[e.code]=true;if(mode&&/^(Space|Digit[1-5]|KeyQ|KeyC|Tab)$/.test(e.code))e.preventDefault()});
+addEventListener('keydown',e=>{if(!keys[e.code])pressed.add(e.code);keys[e.code]=true;if(mode&&/^(Space|Digit[1-4]|KeyQ|KeyC|Tab)$/.test(e.code))e.preventDefault()});
 addEventListener('keyup',e=>{keys[e.code]=false});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;mouseDown=false;me.block=false});
 const cv=$('#c');
@@ -629,7 +749,7 @@ function buildTouch(){
     el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();el.setPointerCapture(e.pointerId);el.classList.add('on');down()});
     const u=()=>{el.classList.remove('on');up&&up()};el.addEventListener('pointerup',u);el.addEventListener('pointercancel',u);box.appendChild(el);return el};
   for(const t of TB)mk(...t);
-  const SHORT=['Feuer','Wasser','Blitz','Böe','Wand'];SKILLS.forEach((S,i)=>mk(SHORT[i],S.css+'cc',16,0,0,()=>cast(me,i)));
+  me.skills.forEach((S,i)=>mk(S.short,CHARS[me.char].css+'cc',16,0,0,()=>cast(me,i)));
   // Fähigkeiten als Reihe über den Kampfknöpfen
   const sk=[...box.children].slice(TB.length);sk.forEach((el,i)=>{Object.assign(el.style,{right:`calc(${16+i*56}px + env(safe-area-inset-right))`,bottom:`calc(180px + env(safe-area-inset-bottom))`,width:'50px',height:'50px',fontSize:'11px',color:'#111',textShadow:'none'})});
 }
@@ -653,7 +773,7 @@ function playerInput(dt){
   if(pressed.has('Space'))jump(me);
   if(pressed.has('KeyC')||pressed.has('ControlLeft'))startSlide(me,mx,mz);
   if(pressed.has('KeyQ'))startDash(me,mx,mz);
-  for(let i=0;i<5;i++)if(pressed.has('Digit'+(i+1)))cast(me,i);
+  for(let i=0;i<4;i++)if(pressed.has('Digit'+(i+1)))cast(me,i);
   if(mouseDown&&me.attackT<=0)melee(me);
   moveFighter(me,mx,mz,keys.ShiftLeft||keys.ShiftRight||touchSprint,dt);
   pressed.clear();
@@ -690,7 +810,7 @@ let foeHitBox=null;function foeHitMeshes(){if(!foeHitBox){foeHitBox=new THREE.Me
 
 /* ===== HUD ===== */
 const skillEls=[];
-function buildSkillBar(){const box=$('#skills');box.innerHTML='';SKILLS.forEach(S=>{const d=document.createElement('div');d.className='sk';d.style.setProperty('--c',S.css);d.innerHTML=`<b>${S.key}</b><span>${S.name}</span><i class="cd"></i>`;box.appendChild(d);skillEls.push(d)});
+function buildSkillBar(){const box=$('#skills');box.innerHTML='';skillEls.length=0;me.skills.forEach((S,i)=>{const d=document.createElement('div');d.className='sk';d.style.setProperty('--c',CHARS[me.char].css);d.innerHTML=`<b>${i+1}</b><span>${S.name}</span><i class="cd"></i>`;box.appendChild(d);skillEls.push(d)});
   if(isTouch)$('#skills').style.display='none'}
 const floats=[],v3=new THREE.Vector3();
 function floatText(f,txt,c,big){const el=document.createElement('div');el.className='ft';el.textContent=txt;el.style.color=c;if(big)el.style.fontSize='26px';$('#fx').appendChild(el);floats.push({el,x:f.x+(Math.random()-.5)*.5,y:f.y+2,z:f.z,born:now})}
@@ -700,8 +820,8 @@ function updateHud(){
   for(let k=floats.length-1;k>=0;k--){const f=floats[k],a=now-f.born;if(a>1){f.el.remove();floats.splice(k,1);continue}
     v3.set(f.x,f.y+a*1.2,f.z).project(camera);if(v3.z>1){f.el.style.opacity=0;continue}f.el.style.left=(v3.x+1)/2*W+'px';f.el.style.top=(1-v3.y)/2*H+'px';f.el.style.opacity=String(1-Math.max(0,a-.6)/.4)}
   $('#hp i').style.width=me.hp+'%';$('#mana i').style.width=me.mana+'%';$('#states').textContent=stateText(me);
-  SKILLS.forEach((S,i)=>{const el=skillEls[i];el.querySelector('.cd').style.height=(me.cds[i]/S.cd*100)+'%';el.classList.toggle('nomana',me.mana<S.mana)});
-  if(isTouch){const tb=$('#tbtns').children;SKILLS.forEach((S,i)=>{const el=tb[TB.length+i];if(el)el.style.opacity=me.cds[i]>0||me.mana<S.mana?.45:1})}
+  me.skills.forEach((S,i)=>{const el=skillEls[i];if(!el)return;el.querySelector('.cd').style.height=(me.cds[i]/S.cd*100)+'%';el.classList.toggle('nomana',me.mana<S.mana)});
+  if(isTouch){const tb=$('#tbtns').children;me.skills.forEach((S,i)=>{const el=tb[TB.length+i];if(el)el.style.opacity=me.cds[i]>0||me.mana<S.mana?.45:1})}
   const fe=$('#foe');v3.set(foe.x,foe.y+foe.h+.35,foe.z).project(camera);
   if(foe.dead||v3.z>1){fe.style.display='none'}else{fe.style.display='block';fe.style.left=(v3.x+1)/2*W+'px';fe.style.top=(1-v3.y)/2*H+'px';$('#foeHp').style.width=foe.hp+'%';$('#foeSt').textContent=stateText(foe)}
   $('#frost').style.opacity=me.st.frozen>0?1:me.st.chill>0?.4:0;
@@ -713,7 +833,7 @@ let bannerT=0;function banner(t,sec=1.8){const b=$('#banner');b.textContent=t;b.
 let mode=null,wins=[0,0],round=1,roundOver=false;
 function resetRound(){
   spawn(me,-20,0,Math.PI/2);spawn(foe,20,0,-Math.PI/2);camYaw=Math.PI/2;camPitch=.15;
-  for(const p of projs)scene.remove(p.g);projs.length=0;
+  for(const p of projs)scene.remove(p.g);projs.length=0;for(const z of zones)scene.remove(z.g);zones.length=0;for(const z of iceStrips)scene.remove(z.mesh);iceStrips.length=0;
   for(let i=solids.length-1;i>=baseSolids;i--){scene.remove(solids[i].mesh);solids.splice(i,1)}
   roundOver=false;camPos.set(-24,2.2,0);
 }
@@ -727,15 +847,21 @@ function onDeath(t){
   setTimeout(()=>{if(!mode)return;if(over){wins=[0,0];round=1;$('#score').textContent='0 : 0'}else round++;$('#round').textContent='Runde '+round;resetRound();banner('Runde '+round,1.2)},3000);
 }
 function startGame(m){
+  setChar(me,myChar);const others=Object.keys(CHARS).filter(k=>k!==myChar);setChar(foe,others[Math.random()*others.length|0]);
+  buildSkillBar();buildTouch();
   mode=m;wins=[0,0];round=1;$('#score').textContent='0 : 0';$('#round').textContent=m==='train'?'Training':'Runde 1';
   $('#menu').classList.add('hide');$('#hud').classList.remove('hide');$('#tools').style.display='flex';
   $('#touch').classList.toggle('on',isTouch);
-  $('#foeName').textContent=m==='train'?'Übungspuppe':'Bot';
+  $('#foeName').textContent=(m==='train'?'Übungspuppe':'Bot')+' ('+CHARS[foe.char].name+')';
   resetRound();banner(m==='train'?'Training':'Runde 1',1.2);
   if(isTouch){try{const d=document.documentElement;const r=d.requestFullscreen||d.webkitRequestFullscreen;Promise.resolve(r&&r.call(d)).then(()=>{try{screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}).catch(()=>{})}catch(e){}}
   else cv.requestPointerLock&&cv.requestPointerLock();
 }
 function pauseToMenu(){mode=null;$('#menu').classList.remove('hide');$('#hud').classList.add('hide');$('#tools').style.display='none';$('#touch').classList.remove('on');try{document.exitPointerLock()}catch(e){}}
+let myChar='fire';try{const c=localStorage.getItem('elem_char');if(CHARS[c])myChar=c}catch(e){}
+function drawChars(){const box=$('#chars');box.innerHTML='';for(const k in CHARS){const C=CHARS[k],b=document.createElement('button');b.type='button';b.className='ch';b.style.setProperty('--c',C.css);b.setAttribute('aria-pressed',String(k===myChar));
+  b.innerHTML=`<i></i>${C.name}<small>${C.skills.map(S=>S.name.replace('\u00ad','')).join(', ')}</small>`;b.title=C.desc;b.onclick=()=>{myChar=k;try{localStorage.setItem('elem_char',k)}catch(e){}drawChars()};box.appendChild(b)}}
+drawChars();
 $('#duelBtn').onclick=()=>startGame('duel');
 if(window.parent!==window){$('#jvBack').hidden=false;$('#jvBack').onclick=()=>{try{window.parent.postMessage({type:'jv-back'},'*')}catch(e){}}}
 $('#trainBtn').onclick=()=>startGame('train');
@@ -769,7 +895,7 @@ function loop(){
     if(!roundOver)botThink(dt);else moveFighter(foe,0,0,false,dt);
     const dx=me.x-foe.x,dz=me.z-foe.z,d=len2(dx,dz); // nicht ineinander laufen
     if(d<.7&&d>.001&&!me.dead&&!foe.dead){const k=(.7-d)/2;me.x+=dx/d*k;me.z+=dz/d*k;foe.x-=dx/d*k;foe.z-=dz/d*k}
-    updateProjs(dt);updateWalls();
+    updateProjs(dt);updateWalls();updateZones(dt);updateIce();
   }
   for(const f of fighters)if(f.body){f.body.root.visible=!f.dead||!mode;animateBody(f,paused?0:dt)}
   updateParticles(dt);updateFx();updateLights();updateSnow(dt);updateCamera(dt);
@@ -782,9 +908,9 @@ function loop(){
   if(!MODEL)$('#note').textContent='3D-Figur konnte nicht geladen werden, es wird eine einfache Figur benutzt.';
   me.body=makeBody(-1);foe.body=makeBody(1);
   spawn(me,-4,2,Math.PI/2);spawn(foe,4,-2,-Math.PI/2);
-  buildSkillBar();buildTouch();
+  setChar(me,myChar);setChar(foe,'water');
   $('#load').remove();loop();
-  window.__elem={me,foe,cast,melee,jump,startSlide,startDash,solids,get mode(){return mode},set camYaw(v){camYaw=v},get camYaw(){return camYaw},keys,pressed};
+  window.__elem={setChar,zones,iceStrips,onIce,aim:()=>camAimPoint(),projs,me,foe,cast,melee,jump,startSlide,startDash,solids,get mode(){return mode},set camYaw(v){camYaw=v},get camYaw(){return camYaw},keys,pressed};
 })();
 </script>
 </body>

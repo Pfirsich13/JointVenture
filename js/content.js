@@ -25,7 +25,7 @@
       { id: 'bomber', title: 'Mini-Bomber', description: 'Bomben legen, Wände sprengen, den anderen erwischen.', status: 'soon', kind: 'builtin', sort: 30 },
       { id: 'arena', title: 'Arena-PvP', description: '3D-Magier-Duell: Feuer gegen Eis. Raum erstellen, Code teilen oder gegen den Bot üben.', status: 'review', kind: 'page', file_path: 'play/arena/index.html', version: 'Magier 3', sort: 40 },
       { id: 'gladiator', title: 'Gladiator 3D', description: 'Schwert gegen Speer im Sand: blocken, treten, Waffe aus der Hand schlagen und werfen.', status: 'review', kind: 'page', file_path: 'play/gladiator/index.html', version: '0.4', sort: 45 },
-      { id: 'elementar', title: 'Elementar-Arena', description: 'Third-Person in der Schnee-Arena: Doppelsprung, Slide, Dash und fünf Elemente mit Kombos. Gegen den Bot.', status: 'review', kind: 'page', file_path: 'play/elementar/index.html', version: '0.1', sort: 47 },
+      { id: 'elementar', title: 'Elementar-Arena', description: 'Wähle Feuer, Wasser, Erde oder Luft: je 4 Attacken, Doppelsprung, Slide und Dash in der Schnee-Arena. Gegen den Bot.', status: 'review', kind: 'page', file_path: 'play/elementar/index.html', version: '0.2', sort: 47 },
       { id: 'zombie', title: 'Zombie-Shooter', description: 'Welle um Welle gegen Horden, allein oder zusammen.', status: 'soon', kind: 'builtin', sort: 50 }
     ],
     projects: [
