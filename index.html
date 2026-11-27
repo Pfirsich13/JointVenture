@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=202611271253">
+<link rel="stylesheet" href="css/style.css?v=202611271304">
 </head>
 <body>
 <div id="hub">
@@ -26,6 +26,7 @@
       <nav class="links" aria-label="Bereiche">
         <a href="#spiele">Spiele</a><a href="#rangliste">Rangliste</a><a href="#stand">Spielstände</a><a href="#arbeit">In Arbeit</a>
       </nav>
+      <button class="bugbtn frbtn" id="friendsBtn" type="button" title="Freunde" aria-label="Freunde" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 19.5c.6-3.3 3-5.2 6-5.2s5.4 1.9 6 5.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.5 4.9a3.3 3.3 0 0 1 0 6.3M17.6 14.6c1.8.7 3 2.4 3.4 4.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Freunde</span><b class="cnt" hidden></b></button>
       <button class="bugbtn" id="reportBtn" type="button" title="Fehler melden" aria-label="Fehler melden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7.5a4 4 0 0 1 8 0M7 10h10v4a5 5 0 0 1-10 0zM12 10v9M3 13h4M17 13h4M4 8l3 2.5M20 8l-3 2.5M4.5 19l3-2.2M19.5 19l-3-2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fehler melden</span></button>
       <a class="admin-link" id="adminLink" href="#admin" hidden>Admin</a>
       <button class="acct" id="acctBtn" type="button"><span class="av" id="acctAv" aria-hidden="true">?</span><span id="acctTxt">Anmelden</span></button>
@@ -92,14 +93,15 @@
 
 <div id="game" hidden></div>
 
-<script src="js/errors.js?v=202611271253"></script>
-<script src="js/config.js?v=202611271253"></script>
-<script src="js/net.js?v=202611271253"></script>
-<script src="js/auth.js?v=202611271253"></script>
-<script src="js/content.js?v=202611271253"></script>
-<script src="js/games/airhockey.js?v=202611271253"></script>
-<script src="js/admin.js?v=202611271253"></script>
-<script src="js/console.js?v=202611271253"></script>
-<script src="js/hub.js?v=202611271253"></script>
+<script src="js/errors.js?v=202611271304"></script>
+<script src="js/config.js?v=202611271304"></script>
+<script src="js/net.js?v=202611271304"></script>
+<script src="js/auth.js?v=202611271304"></script>
+<script src="js/social.js?v=202611271304"></script>
+<script src="js/content.js?v=202611271304"></script>
+<script src="js/games/airhockey.js?v=202611271304"></script>
+<script src="js/admin.js?v=202611271304"></script>
+<script src="js/console.js?v=202611271304"></script>
+<script src="js/hub.js?v=202611271304"></script>
 </body>
 </html>

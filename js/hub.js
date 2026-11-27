@@ -31,6 +31,7 @@
   const BUILTIN_PLAYABLE = (g) => g.kind === 'builtin' && (g.status !== 'soon');
   const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (adminOnly(g) && isAdmin()))
     && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path) || (g.kind === 'page' && PAGE_PATH.test(g.file_path || '')) || (g.kind === 'bundle' && g.file_path));
+  const ONLINE_GAMES = ['airhockey', 'arena'];            // Spiele mit Online-Räumen (Freunde herausfordern)
   const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'], review: ['Zur Freigabe', 'review'] };
   const loadedScripts = {};
   function loadGameModule(id) {
@@ -71,6 +72,16 @@
       }
     },
     statsFor(game) { return store.stats[game] || {}; },
+    toast: (m) => toast(m),
+    login: () => openAccount(),
+    /** Spiele, zu denen man Freunde herausfordern kann */
+    onlineGames: () => visibleGames().filter((g) => playable(g) && ONLINE_GAMES.includes(g.id)),
+    /** Freund herausfordern: Spiel öffnen (Air-Hockey erstellt gleich einen Raum), Einladung dann über hub.invite */
+    startChallenge(friend, game) {
+      hub.challenge = { id: friend.id, name: friend.name, game };
+      open(game, game === 'airhockey' ? 'host' : null);
+      toast(`Raum für das Duell mit ${friend.name} wird geöffnet …`);
+    },
     back() { if (location.hash) history.replaceState(null, '', location.pathname + location.search); route(); },
     report(gameId) { openReport(gameId); },                // Spiele können so „Fehler melden“ öffnen
     inviteLink: (game, code) => `${location.origin}${location.pathname}#${game}/${code}`,
@@ -626,7 +637,7 @@
         });
       }
     } else {
-      $('#game').hidden = true; setInGame(false); renderAll(); applyContent(); demo.resume();
+      $('#game').hidden = true; setInGame(false); renderAll(); applyContent(); demo.resume(); hub.challenge = null;
       if (SECTIONS.includes(id)) requestAnimationFrame(() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ block: 'start' }); });
     }
   }

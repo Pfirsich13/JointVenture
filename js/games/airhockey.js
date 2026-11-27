@@ -701,6 +701,7 @@
     mode = null; pads = null; resize();
     showPanel('menu');
     if (hub.intent === 'bot') startOffline('bot');
+    else if (hub.intent === 'host') startHost();                           // „Herausfordern“ aus der Freundesliste
     else if (hub.intent && hub.intent.join) startJoin(hub.intent.join);   // über einen Einladungs-Link gekommen
     lastT = performance.now() / 1000;
     raf = requestAnimationFrame(loop);

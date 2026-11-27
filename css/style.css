@@ -397,3 +397,53 @@ body.in-game #mainView,body.in-game #adminView,body.in-game #maint,body.in-game 
 .pw-result code{display:inline-block;font:700 20px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.02em;margin:6px 0;user-select:all;color:var(--ink)}
 .pw-inline{display:flex;gap:8px;flex-wrap:wrap}
 .pw-inline .field{flex:1;min-width:200px;margin:0}
+/* Freunde & Chat (social.js) */
+.cnt{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:var(--red);color:#fff;font:700 11.5px/1 var(--text)}
+.frbtn{position:relative;margin-left:auto}
+.frbtn~.bugbtn{margin-left:0}
+.frbtn .cnt{position:absolute;top:-6px;right:-6px;box-shadow:0 0 0 2px var(--bg)}
+.links+.frbtn{margin-left:0}
+@media (max-width:620px){.links+.frbtn{margin-left:auto}.frbtn{padding:0;width:42px;justify-content:center}.frbtn span{display:none}.frbtn:not([hidden])~.bugbtn{margin-left:0}}
+.social{position:fixed;right:18px;bottom:18px;z-index:45;width:min(390px,calc(100vw - 36px));height:min(590px,calc(100dvh - var(--top-h,64px) - 30px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--line2);border-radius:20px;box-shadow:0 40px 100px -30px rgba(0,0,0,.95),0 0 0 1px rgba(0,0,0,.4);overflow:hidden;animation:so-in .18s ease-out}
+@keyframes so-in{from{opacity:0;transform:translateY(12px)}}
+@media (max-width:620px){.social{inset:0;width:auto;height:auto;border:0;border-radius:0;z-index:55;padding-bottom:env(safe-area-inset-bottom)}}
+@media (prefers-reduced-motion:reduce){.social{animation:none}}
+.so-head{display:flex;align-items:center;gap:6px;padding:10px 10px 10px 12px;border-bottom:1px solid var(--line);padding-top:max(10px,env(safe-area-inset-top))}
+.so-tabs{display:flex;gap:4px;flex:1;min-width:0;overflow-x:auto}
+.so-tabs button{display:inline-flex;align-items:center;gap:6px;background:none;border:0;color:var(--mute);font-weight:600;font-size:15px;padding:8px 12px;border-radius:10px;min-height:40px;white-space:nowrap}
+.so-tabs button[aria-selected=true]{color:var(--ink);background:rgba(255,255,255,.07)}
+.so-x{flex:none;width:40px;height:40px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--mute);font-size:24px;line-height:1}
+.so-x:hover{color:var(--ink)}
+.so-body{flex:1;min-height:0;overflow:auto;padding:12px 14px 18px;overscroll-behavior:contain}
+.so-search .field{margin:0;min-height:46px}
+.social h4{display:flex;align-items:center;gap:7px;margin:18px 0 4px;color:var(--mute);font:700 12px/1.2 var(--text);text-transform:uppercase;letter-spacing:.07em}
+.so-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.so-row:last-child{border-bottom:0}
+.so-who{flex:1;min-width:0}
+.so-who b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.so-who small{display:block;color:var(--mute);font-size:12.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.so-act{display:flex;align-items:center;gap:6px;flex:none}
+.so-menu{display:flex;flex-wrap:wrap;gap:6px;width:100%;padding-left:38px}
+.sbtn{border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:10px;padding:0 12px;min-height:38px;font-weight:600;font-size:13.5px;cursor:pointer}
+.sbtn:hover{border-color:rgba(255,255,255,.3)}
+.sbtn.pri{background:linear-gradient(135deg,var(--blue),var(--blue2));border-color:transparent}
+.sbtn.bad{background:transparent;border-color:rgba(255,77,94,.4);color:#ff8a96}
+.sbtn:disabled{opacity:.55}
+.ibtn{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;border:1px solid var(--line2);background:var(--card);color:var(--ink);cursor:pointer}
+.ibtn svg{width:20px;height:20px}
+.ibtn:hover,.ibtn[aria-expanded=true]{border-color:rgba(255,255,255,.3);background:var(--card2)}
+.so-tag{color:var(--mute);font-size:13px;font-weight:600;padding:0 4px}
+.so-results:not(:empty){margin-top:6px;padding:4px 12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02)}
+.so-results .empty{padding:6px 0}
+.so-blocked{margin-top:18px;color:var(--mute)}
+.so-blocked summary{cursor:pointer;font-size:14px;padding:6px 0}
+.so-note{color:var(--mute);font-size:14px;margin:6px 0 12px}
+.so-games{display:grid;gap:8px}
+.so-back{margin-top:14px}
+@media (max-width:400px){
+  .top-in{gap:6px}
+  .brand{flex:none}
+  .brand .site-name{font-size:16px}
+  .frbtn,.bugbtn{width:38px;min-height:38px}
+  .admin-link{padding:7px 9px;font-size:14px}
+}
