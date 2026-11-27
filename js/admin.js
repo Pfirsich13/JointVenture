@@ -235,8 +235,12 @@
         const upd = { title: f.elements.title.value.trim() || g.title, description: f.elements.description.value.trim(), status: f.elements.status.value, version: f.elements.version.value.trim() || null, updated_at: now() };
         if (file) { await uploadFile(`${id}/index.html`, file, true); upd.file_path = `${id}/index.html`; }
         if (cover) { upd.cover_path = `${id}/cover.${imgExt(cover)}`; await uploadFile(upd.cover_path, cover, false); }
+        else if (f.elements.dropCover && f.elements.dropCover.checked) upd.cover_path = null;
+        // altes Bild mit anderer Endung (z. B. .png statt .webp) aufräumen
+        const oldCover = g.cover_path && g.cover_path !== upd.cover_path && 'cover_path' in upd ? g.cover_path : null;
         const { error: err } = await db().from('games').update(upd).eq('id', id); if (err) throw err;
-        await saved(file ? 'Neue Version hochgeladen' : 'Spiel gespeichert'); show();
+        if (oldCover) await db().storage.from('games').remove([oldCover]);
+        await saved(file ? 'Neue Version hochgeladen' : cover ? 'Titelbild gespeichert' : 'Spiel gespeichert'); show();
       } catch (err) { msg.textContent = 'Fehler: ' + (err.message || err); busy(btn, false); }
     });
   }
@@ -254,7 +258,9 @@
         <div class="f2"><label class="f"><span>Status</span><select class="field" name="status">${STATUS_OPTS.map(([v, nm]) => `<option value="${v}" ${v === g.status ? 'selected' : ''}>${nm}</option>`).join('')}</select></label>
         <label class="f"><span>Version</span><input class="field" name="version" maxlength="20" value="${esc(g.version || '')}"></label></div>
         ${up ? `<label class="f"><span>Neue Version hochladen (.html, optional)</span><input class="field" name="file" type="file" accept=".html,.htm,text/html"></label>` : ''}
-        <label class="f"><span>Titelbild ${g.cover_path ? 'ersetzen' : 'hinzufügen'} (optional)</span><input class="field" name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label>
+        <div class="cover-edit">${g.cover_path ? `<img class="cover-thumb" src="${esc(Content.fileUrl(g.cover_path, g.updated_at))}" alt="Aktuelles Titelbild">` : ''}
+          <label class="f"><span>Titelbild ${g.cover_path ? 'ersetzen' : 'hinzufügen'} (optional, PNG, JPG oder WebP)</span><input class="field" name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label></div>
+        ${g.cover_path ? '<label class="check"><input type="checkbox" name="dropCover"> <span>Eigenes Titelbild entfernen</span></label>' : ''}
         <p class="msg"></p>
         <div class="row"><button class="btn danger" type="button" data-act="del">Löschen</button><button class="btn primary" type="submit">Speichern</button></div>
       </form></article>`;

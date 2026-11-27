@@ -101,8 +101,9 @@
     if (m.on && isAdmin()) { $('#banner').hidden = false; $('#bannerTxt').textContent = 'Wartungsmodus ist an. Nur Admins sehen die Seite.' + (a.on && a.text ? ' · ' + a.text : ''); }
   }
   function coverFor(g) {
-    if (COVER[g.id]) return COVER[g.id];
+    // Ein hochgeladenes Titelbild hat Vorrang vor dem eingebauten Bild
     if (g.cover_path) return `<img src="${esc(Content.fileUrl(g.cover_path, g.updated_at))}" alt="" loading="lazy">`;
+    if (COVER[g.id]) return COVER[g.id];
     const hue = [...g.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
     return `<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cg-${esc(g.id)}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 60% 28%)"/><stop offset="1" stop-color="#0d0e12"/></linearGradient></defs><rect width="320" height="200" fill="url(#cg-${esc(g.id)})"/><text x="160" y="122" text-anchor="middle" font-family="Sora, sans-serif" font-weight="800" font-size="64" fill="rgba(255,255,255,.85)">${esc((g.title || '?').slice(0, 2).toUpperCase())}</text></svg>`;
   }

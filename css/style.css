@@ -262,3 +262,6 @@ details.new[open] summary{margin-bottom:14px}
 .bk-help p{margin:0}
 .bk-remind{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-color:rgba(255,190,80,.35);background:rgba(255,190,80,.06)}
 .bk-remind span{font-size:15px}
+.cover-edit{display:flex;gap:14px;align-items:flex-end}
+.cover-edit .f{flex:1;min-width:0}
+.cover-thumb{width:96px;aspect-ratio:16/10;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex:none;background:#000}
