@@ -23,7 +23,7 @@
       { id: 'airhockey', title: 'Air-Hockey', description: 'Schnell, laut, gemein. Wer zuerst 7 Tore hat, gewinnt.', status: 'live', kind: 'builtin', version: '1.2', sort: 10 },
       { id: 'reaction', title: 'Reaktionsduell', description: 'Warte aufs Signal und tippe schneller als der andere.', status: 'soon', kind: 'builtin', sort: 20 },
       { id: 'bomber', title: 'Mini-Bomber', description: 'Bomben legen, Wände sprengen, den anderen erwischen.', status: 'soon', kind: 'builtin', sort: 30 },
-      { id: 'arena', title: 'Arena-PvP', description: 'Das 3D-Kampfspiel aus dem Projekt deines Bruders.', status: 'soon', kind: 'builtin', sort: 40 },
+      { id: 'arena', title: 'Arena-PvP', description: '3D-Magier-Duell: Feuer gegen Eis. Raum erstellen, Code teilen oder gegen den Bot üben.', status: 'review', kind: 'page', file_path: 'play/arena/index.html', version: 'Magier 3', sort: 40 },
       { id: 'zombie', title: 'Zombie-Shooter', description: 'Welle um Welle gegen Horden, allein oder zusammen.', status: 'soon', kind: 'builtin', sort: 50 }
     ],
     projects: [

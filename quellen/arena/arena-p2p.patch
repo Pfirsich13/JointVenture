@@ -1,0 +1,548 @@
+diff -ruN a/client/package.json b/client/package.json
+--- a/client/package.json	2026-11-27 11:09:10.247205604 +0100
++++ b/client/package.json	2026-11-27 11:09:10.248572871 +0100
+@@ -14,6 +14,7 @@
+     "@fontsource/barlow": "^5.0.0",
+     "@fontsource/barlow-condensed": "^5.0.0",
+     "@ron/shared": "*",
++    "peerjs": "^1.5.5",
+     "three": "^0.187.0"
+   },
+   "devDependencies": {
+diff -ruN a/client/src/net/Connection.ts b/client/src/net/Connection.ts
+--- a/client/src/net/Connection.ts	2026-11-27 11:09:10.217431850 +0100
++++ b/client/src/net/Connection.ts	2026-11-27 11:09:10.218945527 +0100
+@@ -20,6 +20,12 @@
+ /** Fehler mit einem Text, den man dem Spieler direkt zeigen kann. */
+ export class ConnectionError extends Error {}
+ 
++/**
++ * Online ohne eigenen Spiel-Server (Build für die JointVenture-Seite, VITE_NET=p2p):
++ * Der Browser, der den Raum erstellt, rechnet das Spiel. Siehe net/browser/P2P.ts.
++ */
++const P2P_MODE = import.meta.env.VITE_NET === "p2p";
++
+ /** Adresse des Spiel-Servers bestimmen. */
+ function serverUrl(): string {
+   // Für den späteren Umzug: Adresse fest vorgeben (Datei client/.env, siehe README).
+@@ -74,6 +80,14 @@
+ 
+   /** Neuen Raum erstellen. */
+   static async create(): Promise<Connection> {
++    if (P2P_MODE) {
++      try {
++        const { hostRoom } = await import("./browser/P2P");
++        return new Connection((await hostRoom()) as unknown as Room);
++      } catch (err) {
++        throw new ConnectionError(err instanceof Error ? err.message : "Das hat nicht geklappt.");
++      }
++    }
+     try {
+       const room = await new Client(serverUrl()).create(NET.roomName);
+       return new Connection(room);
+@@ -84,6 +98,14 @@
+ 
+   /** Einem Raum per Code beitreten. */
+   static async join(code: string): Promise<Connection> {
++    if (P2P_MODE) {
++      try {
++        const { joinRoom } = await import("./browser/P2P");
++        return new Connection((await joinRoom(code)) as unknown as Room);
++      } catch (err) {
++        throw new ConnectionError(err instanceof Error ? err.message : "Das hat nicht geklappt.");
++      }
++    }
+     try {
+       const room = await new Client(serverUrl()).joinById(code);
+       return new Connection(room);
+diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
+--- a/client/src/net/browser/P2P.ts	1970-01-01 01:00:00.000000000 +0100
++++ b/client/src/net/browser/P2P.ts	2026-11-27 11:09:10.251341386 +0100
+@@ -0,0 +1,309 @@
++/**
++ * Online spielen ohne eigenen Spiel-Server (für die JointVenture-Seite).
++ *
++ * Wer "Raum erstellen" tippt, ist der Gastgeber: In seinem Browser läuft der
++ * normale Spiel-Raum (server/src/rooms/ArenaRoom.ts, unverändert). Der
++ * Mitspieler verbindet sich per Raum-Code direkt mit ihm (WebRTC über PeerJS).
++ * Der Gastgeber ist damit der Schiedsrichter, genau wie sonst der Server.
++ *
++ * Beide Seiten bekommen ein Objekt, das sich wie ein Colyseus-Raum verhält
++ * (`RoomLike`). Connection.ts merkt deshalb keinen Unterschied.
++ */
++import type { DataConnection, Peer as PeerType, PeerOptions } from "peerjs";
++import { ArenaRoom } from "../../../../server/src/rooms/ArenaRoom";
++import type { Client, Room } from "./colyseus-shim";
++
++/** Macht unsere Raum-Namen beim PeerJS-Vermittler weltweit eindeutig. */
++const PREFIX = "jointventure-arena-v1-";
++/** So lange darf die Gegenseite schweigen, bevor die Verbindung als getrennt gilt. */
++const SILENCE_MS = 10_000;
++/** So lange warten wir beim Beitreten höchstens auf den Gastgeber. */
++const JOIN_TIMEOUT_MS = 15_000;
++
++/** Was Connection.ts von einem Raum braucht (Teil der Colyseus-Schnittstelle). */
++export interface RoomLike {
++  readonly roomId: string;
++  readonly sessionId: string;
++  reconnection: { enabled: boolean };
++  onMessage(type: string, callback: (message: any) => void): void;
++  onLeave(callback: () => void): void;
++  send(type: string, message?: unknown): void;
++  leave(): Promise<void>;
++}
++
++/** Nachrichten zwischen Gast und Gastgeber. */
++type Wire =
++  | { t: "welcome"; sessionId: string; roomId: string }
++  | { t: "full" }
++  | { t: "m"; type: string; msg?: unknown };
++
++/** Die Raum-Seite eines Spielers: hier kommen Nachrichten an, hierüber wird gesendet. */
++class Endpoint implements RoomLike {
++  reconnection = { enabled: false };
++  private readonly handlers = new Map<string, (message: any) => void>();
++  private readonly leaveHandlers: (() => void)[] = [];
++  private closed = false;
++
++  constructor(
++    readonly roomId: string,
++    readonly sessionId: string,
++    private readonly transmit: (type: string, message?: unknown) => void,
++    private readonly teardown: () => void,
++  ) {}
++
++  onMessage(type: string, callback: (message: any) => void): void {
++    this.handlers.set(type, callback);
++  }
++
++  onLeave(callback: () => void): void {
++    this.leaveHandlers.push(callback);
++  }
++
++  send(type: string, message?: unknown): void {
++    if (!this.closed) this.transmit(type, message);
++  }
++
++  /** Eigenes Verlassen: aufräumen, ohne onLeave auszulösen (wie bei Colyseus nach leave()). */
++  leave(): Promise<void> {
++    if (!this.closed) {
++      this.closed = true;
++      this.teardown();
++    }
++    return Promise.resolve();
++  }
++
++  /** Nachricht vom Raum an diesen Spieler. */
++  deliver(type: string, message: unknown): void {
++    if (!this.closed) this.handlers.get(type)?.(message);
++  }
++
++  /** Verbindung ist von der anderen Seite her weg. */
++  drop(): void {
++    if (this.closed) return;
++    this.closed = true;
++    this.teardown();
++    for (const fn of this.leaveHandlers) fn();
++  }
++}
++
++/** Wie über ein echtes Netz: Daten kopieren, damit niemand denselben Speicher teilt. */
++function copy<T>(value: T): T {
++  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
++}
++
++function randomId(): string {
++  return Math.random().toString(36).slice(2, 10);
++}
++
++function peerOptions(): PeerOptions {
++  const options: PeerOptions = {
++    debug: 0,
++    config: {
++      iceServers: [
++        { urls: "stun:stun.l.google.com:19302" },
++        { urls: "stun:stun1.l.google.com:19302" },
++        { urls: "stun:stun.cloudflare.com:3478" },
++      ],
++    },
++  };
++  // Nur zum Testen: ?peerhost=127.0.0.1:9000 benutzt einen eigenen PeerJS-Vermittler.
++  const host = new URLSearchParams(location.search).get("peerhost");
++  if (host) {
++    const [name, port] = host.split(":");
++    Object.assign(options, { host: name, port: Number(port) || 9000, path: "/", secure: false });
++  }
++  return options;
++}
++
++/** PeerJS öffnen. Liefert den Peer, sobald der Vermittler ihn angenommen hat. */
++async function openPeer(id: string | undefined, timeoutMs: number): Promise<PeerType> {
++  const { Peer } = await import("peerjs");
++  return new Promise((resolve, reject) => {
++    const peer = id ? new Peer(id, peerOptions()) : new Peer(peerOptions());
++    const timer = setTimeout(() => {
++      peer.destroy();
++      reject(Object.assign(new Error("timeout"), { type: "timeout" }));
++    }, timeoutMs);
++    peer.once("open", () => {
++      clearTimeout(timer);
++      resolve(peer);
++    });
++    peer.once("error", (err) => {
++      clearTimeout(timer);
++      peer.destroy();
++      reject(err);
++    });
++  });
++}
++
++// ---------------------------------------------------------------- Gastgeber
++
++/** Neuen Raum erstellen. Der Spiel-Raum läuft in diesem Browser. */
++export async function hostRoom(): Promise<RoomLike> {
++  for (let attempt = 0; attempt < 5; attempt++) {
++    const room = new ArenaRoom() as unknown as Room;
++    room.onCreate({});
++    try {
++      const peer = await openPeer(PREFIX + room.roomId, 8000);
++      return startHosting(room, peer);
++    } catch (err) {
++      const type = (err as { type?: string }).type;
++      if (type === "unavailable-id") {
++        // Den Code benutzt gerade jemand anders: neuen Code würfeln.
++        room.hostDispose();
++        continue;
++      }
++      // Vermittler nicht erreichbar: trotzdem spielen (z. B. gegen den Bot).
++      console.warn("Online-Vermittler nicht erreichbar, Raum nur auf diesem Gerät:", err);
++      return startHosting(room, null);
++    }
++  }
++  throw new Error("Es konnte kein freier Raum-Code gefunden werden. Bitte nochmal versuchen.");
++}
++
++function startHosting(room: Room, peer: PeerType | null): RoomLike {
++  const guests = new Set<() => void>();
++  let ended = false;
++
++  // Der eigene Spieler: Nachrichten laufen direkt, nur kopiert und einen Moment später.
++  const local: Client = {
++    sessionId: "s-" + randomId(),
++    send: (type, message) => {
++      const data = copy(message);
++      queueMicrotask(() => endpoint.deliver(type, data));
++    },
++  };
++
++  const endpoint = new Endpoint(
++    room.roomId,
++    local.sessionId,
++    (type, message) => {
++      const data = copy(message);
++      queueMicrotask(() => room.hostMessage(local, type, data));
++    },
++    () => {
++      ended = true;
++      for (const close of [...guests]) close();
++      room.hostLeave(local);
++      room.hostDispose();
++      peer?.destroy();
++    },
++  );
++
++  room.hostJoin(local);
++
++  peer?.on("connection", (conn: DataConnection) => {
++    conn.on("open", () => {
++      if (ended || room.isFull) {
++        conn.send({ t: "full" } satisfies Wire);
++        setTimeout(() => conn.close(), 500);
++        return;
++      }
++      let lastSeen = performance.now();
++      const guest: Client = {
++        sessionId: "s-" + randomId(),
++        send: (type, message) => {
++          if (conn.open) conn.send({ t: "m", type, msg: message } satisfies Wire);
++        },
++      };
++      const watchdog = setInterval(() => {
++        if (performance.now() - lastSeen > SILENCE_MS) close();
++      }, 1000);
++      const close = (): void => {
++        if (!guests.delete(close)) return;
++        clearInterval(watchdog);
++        room.hostLeave(guest);
++        conn.close();
++      };
++      guests.add(close);
++      room.hostJoin(guest);
++      conn.send({ t: "welcome", sessionId: guest.sessionId, roomId: room.roomId } satisfies Wire);
++
++      conn.on("data", (raw) => {
++        lastSeen = performance.now();
++        const data = raw as Wire;
++        if (data && data.t === "m" && typeof data.type === "string") room.hostMessage(guest, data.type, data.msg);
++      });
++      conn.on("close", close);
++      conn.on("error", close);
++    });
++  });
++
++  // Fällt die Verbindung zum Vermittler aus, bleiben bestehende Spiele trotzdem verbunden.
++  peer?.on("disconnected", () => {
++    if (!ended) peer.reconnect();
++  });
++
++  return endpoint;
++}
++
++// ---------------------------------------------------------------- Mitspieler
++
++/** Einem Raum per Code beitreten. */
++export async function joinRoom(code: string): Promise<RoomLike> {
++  let peer: PeerType;
++  try {
++    peer = await openPeer(undefined, JOIN_TIMEOUT_MS);
++  } catch {
++    throw new Error("Keine Verbindung zum Online-Vermittler. Internet prüfen und nochmal versuchen.");
++  }
++
++  const noRoom = `Kein offener Raum mit dem Code ${code}. Stimmt der Code, und ist das Spiel beim anderen noch offen?`;
++
++  return new Promise<RoomLike>((resolve, reject) => {
++    const conn = peer.connect(PREFIX + code, { reliable: true, serialization: "json" });
++    let endpoint: Endpoint | null = null;
++    let lastSeen = performance.now();
++    let watchdog: ReturnType<typeof setInterval> | null = null;
++    let failed = false;
++
++    const fail = (message: string): void => {
++      if (failed || endpoint) return;
++      failed = true;
++      clearTimeout(timer);
++      // Erst die Meldung festhalten, dann aufräumen: destroy() löst sofort "close" aus.
++      reject(new Error(message));
++      peer.destroy();
++    };
++    const timer = setTimeout(() => fail(noRoom), JOIN_TIMEOUT_MS);
++
++    peer.on("error", (err) => {
++      if (endpoint) return; // während des Spiels regelt das der "close"-Fall
++      fail((err as { type?: string }).type === "peer-unavailable" ? noRoom : "Die Verbindung hat nicht geklappt. Bitte nochmal versuchen.");
++    });
++
++    conn.on("data", (raw) => {
++      lastSeen = performance.now();
++      const data = raw as Wire;
++      if (!data || typeof data !== "object") return;
++      if (data.t === "full" && !endpoint) {
++        fail(`Der Raum ${code} ist schon voll.`);
++      } else if (data.t === "welcome" && !endpoint) {
++        clearTimeout(timer);
++        endpoint = new Endpoint(
++          data.roomId,
++          data.sessionId,
++          (type, message) => {
++            if (conn.open) conn.send({ t: "m", type, msg: message } satisfies Wire);
++          },
++          () => {
++            if (watchdog) clearInterval(watchdog);
++            conn.close();
++            peer.destroy();
++          },
++        );
++        watchdog = setInterval(() => {
++          if (performance.now() - lastSeen > SILENCE_MS) endpoint?.drop();
++        }, 1000);
++        resolve(endpoint);
++      } else if (data.t === "m" && endpoint) {
++        endpoint.deliver(data.type, data.msg);
++      }
++    });
++
++    conn.on("close", () => {
++      if (endpoint) endpoint.drop();
++      else fail(noRoom);
++    });
++  });
++}
+diff -ruN a/client/src/net/browser/colyseus-shim.ts b/client/src/net/browser/colyseus-shim.ts
+--- a/client/src/net/browser/colyseus-shim.ts	1970-01-01 01:00:00.000000000 +0100
++++ b/client/src/net/browser/colyseus-shim.ts	2026-11-27 11:09:10.251375399 +0100
+@@ -0,0 +1,97 @@
++/**
++ * Ersatz für das Paket "colyseus", damit der Spiel-Raum (server/src/rooms/ArenaRoom.ts)
++ * unverändert auch im Browser laufen kann.
++ *
++ * Im Online-Modus ohne eigenen Server (JointVenture-Seite) ist der Browser
++ * dessen, der den Raum erstellt, der Schiedsrichter. Der Mitspieler verbindet
++ * sich direkt mit ihm (WebRTC über PeerJS, siehe P2P.ts).
++ *
++ * Nachgebaut ist nur der Teil von Colyseus, den ArenaRoom benutzt.
++ * Die Vite-Einstellung "resolve.alias" leitet `import ... from "colyseus"` hierher um.
++ */
++
++/** Ein Teilnehmer im Raum, aus Sicht des Raums. */
++export interface Client {
++  sessionId: string;
++  send(type: string, message?: unknown): void;
++}
++
++type Handler = (client: Client, message: any) => void;
++
++export class Room {
++  roomId = "";
++  maxClients = Number.POSITIVE_INFINITY;
++  /** Gesperrt = niemand Neues darf beitreten (z. B. solange der Bot mitspielt). */
++  locked = false;
++  readonly clients: Client[] = [];
++
++  private readonly handlers = new Map<string, Handler>();
++  private simTimer: ReturnType<typeof setInterval> | null = null;
++  private disposed = false;
++
++  // --- Wird von ArenaRoom überschrieben ---
++  onCreate(_options?: unknown): void {}
++  onJoin(_client: Client, _options?: unknown): void {}
++  onLeave(_client: Client, _consented?: boolean): void {}
++  onDispose(): void {}
++
++  // --- Werkzeuge, die ArenaRoom aufruft ---
++  onMessage(type: string, handler: Handler): void {
++    this.handlers.set(type, handler);
++  }
++
++  setSimulationInterval(callback: (deltaMs: number) => void, intervalMs = 1000 / 60): void {
++    if (this.simTimer) clearInterval(this.simTimer);
++    let last = performance.now();
++    this.simTimer = setInterval(() => {
++      const now = performance.now();
++      callback(now - last);
++      last = now;
++    }, intervalMs);
++  }
++
++  broadcast(type: string, message?: unknown): void {
++    for (const client of this.clients) client.send(type, message);
++  }
++
++  lock(): Promise<void> {
++    this.locked = true;
++    return Promise.resolve();
++  }
++
++  unlock(): Promise<void> {
++    this.locked = false;
++    return Promise.resolve();
++  }
++
++  // --- Für den Gastgeber (P2P.ts) ---
++  get isFull(): boolean {
++    return this.locked || this.clients.length >= this.maxClients;
++  }
++
++  hostJoin(client: Client): void {
++    this.clients.push(client);
++    this.onJoin(client, {});
++  }
++
++  hostLeave(client: Client): void {
++    const i = this.clients.indexOf(client);
++    if (i < 0) return;
++    this.clients.splice(i, 1);
++    this.onLeave(client, true);
++  }
++
++  hostMessage(client: Client, type: string, message: unknown): void {
++    if (this.disposed || !this.clients.includes(client)) return;
++    const handler = this.handlers.get(type);
++    if (handler) handler(client, message);
++  }
++
++  hostDispose(): void {
++    if (this.disposed) return;
++    this.disposed = true;
++    if (this.simTimer) clearInterval(this.simTimer);
++    this.simTimer = null;
++    this.onDispose();
++  }
++}
+diff -ruN a/client/src/styles.css b/client/src/styles.css
+--- a/client/src/styles.css	2026-11-27 11:09:10.233453552 +0100
++++ b/client/src/styles.css	2026-11-27 11:09:10.235038473 +0100
+@@ -1161,3 +1161,20 @@
+ .bar-stamina {
+   display: none;
+ }
++
++/* Zurück-Knopf, wenn das Spiel in die JointVenture-Seite eingebettet ist. */
++.start-back {
++  align-self: flex-start;
++  min-height: 44px;
++  padding: 0 4px;
++  background: none;
++  border: 0;
++  color: var(--kreide-matt);
++  font: inherit;
++  font-weight: 600;
++  cursor: pointer;
++}
++
++.start-back:hover {
++  color: var(--kreide);
++}
+diff -ruN a/client/src/ui/StartScreen.ts b/client/src/ui/StartScreen.ts
+--- a/client/src/ui/StartScreen.ts	2026-11-27 11:09:10.226627084 +0100
++++ b/client/src/ui/StartScreen.ts	2026-11-27 11:09:10.228177732 +0100
+@@ -58,6 +58,16 @@
+     `;
+     parent.appendChild(this.root);
+ 
++    // Eingebettet in die JointVenture-Seite: ein Weg zurück zur Spieleauswahl.
++    if (window.parent !== window) {
++      const back = document.createElement("button");
++      back.type = "button";
++      back.className = "start-back";
++      back.textContent = "← Zurück zur Spieleauswahl";
++      back.addEventListener("click", () => window.parent.postMessage({ type: "jv-back" }, "*"));
++      this.root.prepend(back);
++    }
++
+     this.messageEl = this.root.querySelector(".start-message")!;
+     this.codeInput = this.root.querySelector(".code-input")!;
+     this.buttons = [...this.root.querySelectorAll<HTMLButtonElement>("button")];
+diff -ruN a/client/vite.config.ts b/client/vite.config.ts
+--- a/client/vite.config.ts	2026-11-27 11:09:10.240459978 +0100
++++ b/client/vite.config.ts	2026-11-27 11:09:10.241748367 +0100
+@@ -1,4 +1,5 @@
+ import os from "node:os";
++import { fileURLToPath } from "node:url";
+ import { defineConfig } from "vite";
+ import { qrcode } from "vite-plugin-qrcode";
+ 
+@@ -28,6 +29,13 @@
+ const lan = findLanAddress();
+ 
+ export default defineConfig({
++  resolve: {
++    alias: {
++      // Nur für den Online-Modus ohne Server (VITE_NET=p2p): Der Spiel-Raum aus /server
++      // läuft dann im Browser. Statt des echten Colyseus-Servers nimmt er diesen Nachbau.
++      colyseus: fileURLToPath(new URL("./src/net/browser/colyseus-shim.ts", import.meta.url)),
++    },
++  },
+   server: {
+     // host: true = auch für andere Geräte im WLAN erreichbar, nicht nur für diesen PC.
+     host: true,
+@@ -35,7 +43,8 @@
+     strictPort: true,
+   },
+   define: {
+-    __LAN_URL__: JSON.stringify(lan ? `http://${lan}:${CLIENT_PORT}` : ""),
++    // Im Online-Build ohne Server (VITE_NET=p2p) gibt es keinen Heimnetz-Hinweis.
++    __LAN_URL__: JSON.stringify(lan && process.env.VITE_NET !== "p2p" ? `http://${lan}:${CLIENT_PORT}` : ""),
+   },
+   // Zeigt im Startfenster einen QR-Code, den man mit dem Handy scannen kann.
+   plugins: [qrcode()],

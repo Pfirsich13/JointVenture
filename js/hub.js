@@ -27,9 +27,10 @@
   const findGame = (id) => allGames().find((g) => g.id === id);
   // Kann man das Spiel starten? (eingebautes Modul oder hochgeladene Datei)
   // Eingebaute Spiele liegen als js/games/<id>.js im Code und werden bei Bedarf nachgeladen.
+  const PAGE_PATH = /^play\/[a-z0-9-]+\/[\w.-]+\.html$/;     // Spiele mit eigenem Ordner auf dieser Seite
   const BUILTIN_PLAYABLE = (g) => g.kind === 'builtin' && (g.status !== 'soon');
   const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (adminOnly(g) && isAdmin()))
-    && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path));
+    && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path) || (g.kind === 'page' && PAGE_PATH.test(g.file_path || '')));
   const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'], review: ['Zur Freigabe', 'review'] };
   const loadedScripts = {};
   function loadGameModule(id) {
@@ -184,6 +185,7 @@
     document.body.appendChild(el); return el;
   }
   function openAccount() {
+    if (document.querySelector('.sheet')) return;          // nie mehrere Fenster übereinander
     if (!window.Auth || !Auth.ready) return askName(false);
     if (Auth.user()) {
       const el = sheet(`<h3>${esc(hub.getName())}</h3><p>Angemeldet als ${esc(Auth.user().email || '')}</p>
@@ -302,6 +304,22 @@
     stop() { }
   };
 
+  /* ---------- Spiel mit eigenem Ordner (z. B. play/arena/) im ganzen Fenster ---------- */
+  const pagePlayer = {
+    start(el, g) {
+      const q = new URLSearchParams({ v: g.updated_at || g.version || '1' });
+      const ph = new URLSearchParams(location.search).get('peerhost');      // nur für Tests
+      if (ph) q.set('peerhost', ph);
+      el.innerHTML = `<iframe class="upframe" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock" allowfullscreen src="${esc(g.file_path)}?${q}"></iframe>`;
+      el.querySelector('iframe').focus();
+    },
+    stop() { }
+  };
+  // Das eingebettete Spiel meldet "zurück" (Knopf auf seinem Startbildschirm).
+  addEventListener('message', (e) => {
+    if (e.origin === location.origin && e.data && e.data.type === 'jv-back' && !$('#game').hidden) hub.back();
+  });
+
   /* ---------- Umschalten: Startseite, Spiel, Admin ---------- */
   let current = null;
   function route() {
@@ -326,7 +344,8 @@
       $('#hub').hidden = true; $('#game').hidden = false; demo.pause();
       if (!current) {
         const token = current = { id, mod: { stop() { } } };
-        const starting = g.kind === 'builtin' ? loadGameModule(g.id) : Promise.resolve({ start: (el) => uploadPlayer.start(el, g), stop() { } });
+        const player = g.kind === 'page' ? pagePlayer : uploadPlayer;
+        const starting = g.kind === 'builtin' ? loadGameModule(g.id) : Promise.resolve({ start: (el) => player.start(el, g), stop() { } });
         if (g.kind === 'builtin' && !(window.Games && window.Games[g.id])) $('#game').innerHTML = '<div class="g-panel"><div class="box"><h2>Lädt …</h2><div class="wait"><i></i><i></i><i></i></div></div></div>';
         starting.then((mod) => {
           if (current !== token) return;                 // inzwischen woanders hin gewechselt

@@ -67,6 +67,12 @@ Website: https://pfirsich13.github.io/JointVenture/ · Code: GitHub-Repository `
 **Weg B – fertige HTML-Datei hochladen (z. B. aus einem anderen Chat):**
 Admin-Panel → Spiele → „Neues Spiel oder Beta-Version hochladen“. Das Spiel muss eine einzelne HTML-Datei sein und läuft abgeschirmt in einem Rahmen (kein Zugriff auf Anmeldung und Spielstände).
 
+**Weg C – Spiel mit eigenem Ordner (z. B. ein Vite-Build wie die Arena):**
+1. Fertigen Build nach `play/<id>/` legen (mit relativen Pfaden bauen: `--base ./`). Startdatei `play/<id>/index.html`.
+2. In Supabase: `kind = 'page'`, `file_path = 'play/<id>/index.html'`, Status `review`. Die Seite öffnet das Spiel im ganzen Fenster. Ein Knopf im Spiel kann mit `window.parent.postMessage({ type: 'jv-back' }, '*')` zur Spieleauswahl zurückführen.
+
+**Arena (Spiel des Bruders) aktualisieren:** Neue ZIP entpacken, `patch -p1 < quellen/arena/arena-p2p.patch` anwenden (macht das Spiel ohne eigenen Server online spielbar: der Raum-Ersteller rechnet, der Mitspieler verbindet sich per PeerJS), `npm install`, dann im Ordner `client`: `VITE_NET=p2p npx vite build --base ./ --outDir dist-web`. Inhalt von `dist-web` nach `play/arena/`, dann `update public.games set version = '…', status = 'review', updated_at = now() where id = 'arena';`. Details: `quellen/arena/LIESMICH.md`.
+
 **Status-Werte:** `live` Spielbar · `beta` Beta · `soon` Bald · `hidden` Versteckt · `review` Zur Freigabe.
 
 ## Definition von „fertig“
