@@ -439,7 +439,7 @@
   /* ---------- Spieler ---------- */
   async function players(body) {
     const [pr, rs] = await Promise.all([
-      db().from('profiles').select('id,name,role,created_at').order('created_at'),
+      db().from('profiles').select('id,name,role,created_at,avatar_path').order('created_at'),
       db().from('results').select('user_id').limit(5000)
     ]);
     if (pr.error) throw pr.error;
@@ -447,7 +447,7 @@
     const me = Auth.user() && Auth.user().id;
     body.innerHTML = `<p class="hint">Neue Spieler registrieren sich selbst auf der Seite (oben rechts „Anmelden“). Hier kannst du ihnen Admin-Rechte geben.</p>
       <div class="cards">${pr.data.map((p) => `<article class="panel player" data-id="${p.id}">
-        <span class="av">${esc((p.name || '?')[0].toUpperCase())}</span>
+        <span class="av">${p.avatar_path ? `<img src="${esc(Auth.avatarUrl(p.avatar_path))}" alt="" loading="lazy">` : esc((p.name || '?')[0].toUpperCase())}</span>
         <div class="pinfo"><b>${esc(p.name)}${p.id === me ? ' <small>(du)</small>' : ''}</b><small>dabei seit ${new Date(p.created_at).toLocaleDateString('de-DE')} · ${count[p.id] || 0} Matches</small></div>
         <span class="pill ${p.role === 'admin' ? 'ok' : ''}">${p.role === 'admin' ? 'Admin' : 'Spieler'}</span>
         <button class="btn" type="button" data-role="${p.role === 'admin' ? 'player' : 'admin'}">${p.role === 'admin' ? 'Admin entfernen' : 'Zum Admin machen'}</button>

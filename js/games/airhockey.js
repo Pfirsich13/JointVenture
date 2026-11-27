@@ -625,7 +625,7 @@
     } else if (state === 'host') {
       p.innerHTML = `<div class="box"><h2>Dein Raum</h2><p>Sag diesen Code deinem Gegner:</p>
         <div class="code-big">${escapeHtml(code)}</div><div class="wait"><i></i><i></i><i></i></div><p>Warte auf Gegner …</p>
-        <div class="stack"><button class="btn" data-a="copy" data-code="${escapeHtml(code)}">Code kopieren</button><button class="btn main" data-a="menu">Abbrechen</button></div>${e}</div>`;
+        <div class="stack">${hub.invite ? `<button class="btn blue" data-a="invite" data-code="${escapeHtml(code)}">Freund einladen (WhatsApp)</button><button class="btn" data-a="copylink" data-code="${escapeHtml(code)}">Einladungs-Link kopieren</button>` : `<button class="btn" data-a="copy" data-code="${escapeHtml(code)}">Code kopieren</button>`}<button class="btn main" data-a="menu">Abbrechen</button></div>${e}</div>`;
     } else if (state === 'join') {
       p.innerHTML = `<div class="box"><h2>Beitreten</h2><p>Code von deinem Gegner eingeben:</p>
         <form class="stack" data-form="join"><input class="field code-in" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="CODE" aria-label="Raum-Code">
@@ -657,6 +657,14 @@
     else if (a === 'back') hub.back();
     else if (a === 'menu') { closeConn(); mode = null; pads = null; ui.net.hidden = true; showPanel('menu'); }
     else if (a === 'rematch') rematch();
+    else if (a === 'invite' || a === 'copylink') {
+      const label = b.textContent;
+      hub.invite('airhockey', b.dataset.code, a === 'copylink' ? 'copy' : '').then((r) => {
+        if (r === 'abgebrochen') return;
+        b.textContent = r === 'kopiert' ? 'Link kopiert!' : 'Einladung verschickt!';
+        setTimeout(() => { b.textContent = label; }, 2500);
+      });
+    }
     else if (a === 'copy') {
       const c = b.dataset.code;
       const done = () => { b.textContent = 'Kopiert!'; };
@@ -693,6 +701,7 @@
     mode = null; pads = null; resize();
     showPanel('menu');
     if (hub.intent === 'bot') startOffline('bot');
+    else if (hub.intent && hub.intent.join) startJoin(hub.intent.join);   // über einen Einladungs-Link gekommen
     lastT = performance.now() / 1000;
     raf = requestAnimationFrame(loop);
   }

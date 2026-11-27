@@ -72,7 +72,17 @@
     },
     statsFor(game) { return store.stats[game] || {}; },
     back() { if (location.hash) history.replaceState(null, '', location.pathname + location.search); route(); },
-    report(gameId) { openReport(gameId); }                 // Spiele können so „Fehler melden“ öffnen
+    report(gameId) { openReport(gameId); },                // Spiele können so „Fehler melden“ öffnen
+    inviteLink: (game, code) => `${location.origin}${location.pathname}#${game}/${code}`,
+    /** Freund einladen: am Handy Teilen-Menü (WhatsApp …), am PC WhatsApp im Browser. 'copy' kopiert nur den Link. */
+    async invite(game, code, how) {
+      const g = findGame(game), url = hub.inviteLink(game, code);
+      const text = `Ich fordere dich bei ${g ? g.title : 'JointVenture'} heraus! Tipp auf den Link, dann bist du direkt in meinem Raum (Code ${code}): ${url}`;
+      if (how === 'copy') { try { await navigator.clipboard.writeText(url); return 'kopiert'; } catch (e) { prompt('Link kopieren:', url); return 'kopiert'; } }
+      if (navigator.maxTouchPoints > 0 && navigator.share) { try { await navigator.share({ text }); return 'geteilt'; } catch (e) { return 'abgebrochen'; } }
+      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+      return 'whatsapp';
+    }
   };
   window.Hub = hub;
 
@@ -175,14 +185,15 @@
   function renderAccount() {
     const u = window.Auth && Auth.user();
     $('#acctTxt').textContent = u ? hub.getName() : (window.Auth && Auth.ready ? 'Anmelden' : hub.getName());
-    $('#acctAv').textContent = (hub.getName()[0] || '?').toUpperCase();
+    const pic = u && Auth.avatar && Auth.avatar();
+    $('#acctAv').innerHTML = pic ? `<img src="${esc(pic)}" alt="">` : esc((hub.getName()[0] || '?').toUpperCase());
     $('#acctBtn').classList.toggle('in', !!u);
     $('#acctBtn').setAttribute('aria-label', u ? 'Konto: ' + hub.getName() : 'Anmelden');
   }
   function renderAll() { renderAccount(); renderStand(); }
   async function refreshCloud() {
     cloud = window.Auth && Auth.user() ? await Auth.loadResults() : null;
-    renderAll();
+    renderAll(); renderRank();
   }
 
   /* ---------- Fenster: Anmelden / Registrieren / Name ---------- */
@@ -194,19 +205,15 @@
   function openAccount() {
     if (document.querySelector('.sheet')) return;          // nie mehrere Fenster übereinander
     if (!window.Auth || !Auth.ready) return askName(false);
-    if (Auth.user()) {
-      const el = sheet(`<h3>${esc(hub.getName())}</h3><p>Angemeldet als ${esc(Auth.user().email || '')}</p>
-        <div class="row"><button class="btn" type="button" data-close>Schließen</button><button class="btn danger" type="button" data-out>Abmelden</button></div>`);
-      el.querySelector('[data-out]').onclick = async () => { await Auth.signOut(); el.remove(); };
-      return;
-    }
+    if (Auth.user()) return openProfile();
     let mode = 'in';
     const el = sheet(`<h3>Willkommen</h3><p>Melde dich an, damit deine Spielstände gespeichert werden.</p>
       <div class="tabs" role="tablist"><button type="button" role="tab" data-t="in" aria-selected="true">Anmelden</button><button type="button" role="tab" data-t="up" aria-selected="false">Registrieren</button></div>
       <form novalidate>
         <input class="field" name="name" placeholder="Dein Name" maxlength="16" autocomplete="nickname" hidden>
         <input class="field" name="email" type="email" placeholder="E-Mail" autocomplete="email" required>
-        <input class="field" name="pw" type="password" placeholder="Passwort (mind. 6 Zeichen)" autocomplete="current-password" required>
+        <input class="field" name="pw" type="password" placeholder="Passwort" autocomplete="current-password" required>
+        <p class="hint pw-hint" hidden>Mindestens 8 Zeichen, mit Buchstaben und Zahlen.</p>
         <p class="msg" aria-live="polite"></p>
         <div class="row"><button class="btn" type="button" data-close>Abbrechen</button><button class="btn primary" type="submit">Anmelden</button></div>
       </form>`);
@@ -216,12 +223,15 @@
       el.querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
       f.elements.name.hidden = mode !== 'up'; submit.textContent = mode === 'up' ? 'Konto erstellen' : 'Anmelden';
       f.elements.pw.autocomplete = mode === 'up' ? 'new-password' : 'current-password'; msg.textContent = '';
+      f.elements.pw.placeholder = mode === 'up' ? 'Passwort (mind. 8 Zeichen)' : 'Passwort';
+      el.querySelector('.pw-hint').hidden = mode !== 'up';
     }; });
     f.addEventListener('submit', async (e) => {
       e.preventDefault(); msg.className = 'msg'; msg.textContent = '';
       const name = f.elements.name.value.trim(), email = f.elements.email.value.trim(), pw = f.elements.pw.value;
       if (mode === 'up' && !name) { msg.textContent = 'Bitte gib einen Namen ein.'; return; }
       if (!email || !pw) { msg.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+      if (mode === 'up' && (pw.length < 8 || !/[A-Za-zÄÖÜäöüß]/.test(pw) || !/\d/.test(pw))) { msg.textContent = 'Das Passwort braucht mindestens 8 Zeichen, mit Buchstaben und Zahlen.'; return; }
       submit.disabled = true;
       try {
         if (mode === 'up') {
@@ -233,6 +243,84 @@
     });
     setTimeout(() => f.elements.email.focus(), 50);
   }
+  /* ---------- Profil: Name, eigene Statistik, Platz in der Rangliste ---------- */
+  const MODES = [['online', 'Online'], ['bot', 'Training'], ['local', 'Lokal']];
+  async function openProfile() {
+    const u = Auth.user();
+    const el = sheet(`<div class="prof-head"><span class="av big" id="profPic"></span>
+        <div><h3>${esc(hub.getName())}</h3><p>${esc(u.email || '')}${isAdmin() ? ' · Admin' : ''}</p>
+        <div class="pic-btns"><label class="btn small">Profilbild wählen<input type="file" accept="image/*" hidden data-pic></label><button class="btn small" type="button" data-nopic hidden>Entfernen</button></div></div></div>
+      <p class="msg pic-msg" aria-live="polite"></p>
+      <form class="prof-name" novalidate><label class="f"><span>Dein Name (so sehen dich die anderen)</span>
+        <div class="inline"><input class="field" name="n" maxlength="16" value="${esc(hub.getName())}" autocomplete="nickname"><button class="btn" type="submit">Speichern</button></div></label>
+        <p class="msg" aria-live="polite"></p></form>
+      <h4>Deine Statistik</h4><div class="prof-stats"><p class="empty">Lädt …</p></div>
+      <p class="prof-rank"></p>
+      <div class="row wrap-row"><button class="btn" type="button" data-mine>Deine Fehlermeldungen</button><button class="btn danger" type="button" data-out>Abmelden</button></div>
+      <div class="row"><button class="btn" type="button" data-close>Schließen</button></div>`);
+    el.querySelector('.box').classList.add('wide');
+    const picMsg = el.querySelector('.pic-msg');
+    const showPic = () => {
+      const url = Auth.avatar();
+      el.querySelector('#profPic').innerHTML = url ? `<img src="${esc(url)}" alt="Dein Profilbild">` : esc((hub.getName()[0] || '?').toUpperCase());
+      el.querySelector('[data-nopic]').hidden = !url;
+    };
+    showPic();
+    el.querySelector('[data-pic]').addEventListener('change', async (e) => {
+      const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+      picMsg.className = 'msg pic-msg'; picMsg.textContent = 'Lädt hoch …';
+      try { await Auth.setAvatar(file); showPic(); picMsg.className = 'msg pic-msg good'; picMsg.textContent = 'Profilbild gespeichert.'; renderRank(); }
+      catch (err) { picMsg.textContent = err.message; }
+    });
+    el.querySelector('[data-nopic]').onclick = async () => {
+      try { await Auth.removeAvatar(); showPic(); picMsg.className = 'msg pic-msg'; picMsg.textContent = ''; renderRank(); }
+      catch (err) { picMsg.textContent = err.message; }
+    };
+    el.querySelector('[data-out]').onclick = async () => { await Auth.signOut(); el.remove(); };
+    el.querySelector('[data-mine]').onclick = () => { el.remove(); openReport('', true); };
+    const nf = el.querySelector('.prof-name'), nmsg = nf.querySelector('.msg');
+    nf.addEventListener('submit', async (e) => {
+      e.preventDefault(); nmsg.className = 'msg'; nmsg.textContent = '';
+      const n = nf.elements.n.value.trim();
+      if (n.length < 1 || n.length > 16) { nmsg.textContent = 'Der Name braucht 1 bis 16 Zeichen.'; return; }
+      try { await Auth.rename(n); store.name = n; save(); nmsg.className = 'msg good'; nmsg.textContent = 'Gespeichert.'; el.querySelector('.prof-head h3').textContent = n; showPic(); renderAll(); renderRank(); }
+      catch (err) { nmsg.textContent = err.message; }
+    });
+    // Statistik pro Spiel und Art
+    const rows = await Auth.myStats(), per = {};
+    rows.forEach((r) => { const g = per[r.game] || (per[r.game] = {}); const k = g[r.mode] || (g[r.mode] = { w: 0, l: 0 }); r.won ? k.w++ : k.l++; });
+    const games = Object.keys(per);
+    el.querySelector('.prof-stats').innerHTML = games.length ? `<table class="stat-table"><thead><tr><th>Spiel</th>${MODES.map(([, n]) => `<th>${n}</th>`).join('')}</tr></thead><tbody>${games.map((g) => `<tr><td>${esc(gameTitle(g))}</td>${MODES.map(([m]) => { const k = per[g][m]; return `<td>${k ? `<b class="w">${k.w}</b> : <b class="l">${k.l}</b>` : '–'}</td>`; }).join('')}</tr>`).join('')}</tbody></table><p class="hint">Siege : Niederlagen</p>` : '<p class="empty">Noch keine gespeicherten Spiele. Leg los!</p>';
+    // Platz in der Rangliste
+    const lb = await Auth.leaderboard(null), i = lb ? lb.findIndex((x) => x.player_id === u.id) : -1;
+    el.querySelector('.prof-rank').innerHTML = i >= 0 ? `In der Rangliste: <b>Platz ${i + 1}</b> von ${lb.length} (Online-Duelle)` : 'In der Rangliste bist du, sobald du ein Online-Duell gespielt hast.';
+  }
+
+  /* ---------- Rangliste (nur Online-Duelle) ---------- */
+  let rankGame = '';
+  async function renderRank() {
+    const box = $('#rankBox'); if (!box) return;
+    const filters = visibleGames().filter((g) => g.kind === 'builtin' && g.status !== 'soon');
+    $('#rankFilter').innerHTML = filters.length > 1 ? [['', 'Alle Spiele'], ...filters.map((g) => [g.id, g.title])].map(([id, n]) => `<button type="button" class="chip" data-rank="${esc(id)}" aria-pressed="${id === rankGame}">${esc(n)}</button>`).join('') : '';
+    if (!window.Auth || !Auth.ready) { box.innerHTML = '<p class="empty">Die Rangliste ist gerade nicht erreichbar.</p>'; return; }
+    if (!Auth.user()) { box.innerHTML = '<div class="rank-login"><p>Melde dich an, um zu sehen, wer vorne liegt, und um selbst in die Rangliste zu kommen.</p><button class="btn primary" type="button" data-login>Anmelden</button></div>'; return; }
+    const list = await Auth.leaderboard(rankGame || null);
+    if (!list) { box.innerHTML = '<p class="empty">Die Rangliste konnte nicht geladen werden.</p>'; return; }
+    if (!list.length) { box.innerHTML = '<p class="empty">Noch keine Online-Duelle. Fordere jemanden heraus!</p>'; return; }
+    const me = Auth.user().id, medal = ['🥇', '🥈', '🥉'];
+    const myIdx = list.findIndex((x) => x.player_id === me);
+    const shown = list.slice(0, 20); if (myIdx >= 20) shown.push(list[myIdx]);
+    box.innerHTML = `<table class="rank-table"><thead><tr><th>Platz</th><th>Spieler</th><th>Siege</th><th>Niederl.</th><th>Quote</th></tr></thead><tbody>${shown.map((r) => {
+      const i = list.indexOf(r), q = r.matches ? Math.round(r.wins / r.matches * 100) : 0;
+      const pic = Auth.avatarUrl(r.avatar_path);
+      return `<tr class="${r.player_id === me ? 'me' : ''}"><td>${medal[i] || i + 1}</td><td><span class="rank-who"><span class="av sm">${pic ? `<img src="${esc(pic)}" alt="" loading="lazy">` : esc((r.name || '?')[0].toUpperCase())}</span>${esc(r.name)}${r.player_id === me ? ' <small>(du)</small>' : ''}</span></td><td>${r.wins}</td><td>${r.losses}</td><td>${q} %</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }
+  document.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-rank]'); if (c) { rankGame = c.dataset.rank; renderRank(); return; }
+    if (e.target.closest('#rankBox [data-login]')) openAccount();
+  });
+
   /* ---------- Fehler melden ---------- */
   const REPORT_STATUS = { neu: ['Neu', ''], in_arbeit: ['In Arbeit', 'beta'], erledigt: ['Erledigt', 'ok'], abgelehnt: ['Kein Fehler', 'off'] };
   function reportContext() {
@@ -246,7 +334,7 @@
       fehler: (window.JV_ERRORS || []).slice(-10)
     };
   }
-  function openReport(gameId) {
+  function openReport(gameId, showMine) {
     if (document.querySelector('.sheet')) return;
     if (!window.Auth || !Auth.ready) {
       sheet('<h3>Fehler melden</h3><p>Melden geht gerade nicht, weil keine Verbindung zum Server besteht. Versuch es bitte später nochmal.</p><div class="row"><button class="btn" type="button" data-close>Schließen</button></div>');
@@ -293,7 +381,8 @@
         el.querySelector('.box').innerHTML = '<h3>Danke!</h3><p>Deine Meldung ist angekommen. Unter „Fehler melden“ → „Deine Meldungen“ siehst du, wenn wir sie bearbeitet haben.</p><div class="row"><button class="btn primary" type="button" data-close>Schließen</button></div>';
       } catch (err) { msg.textContent = err.message; submit.disabled = false; submit.textContent = 'Senden'; }
     });
-    setTimeout(() => f.elements.title.focus(), 50);
+    if (showMine) { const d = el.querySelector('.myreports'); d.open = true; d.scrollIntoView({ block: 'nearest' }); }
+    else setTimeout(() => f.elements.title.focus(), 50);
   }
 
   function askName(first) {
@@ -380,7 +469,8 @@
       const q = new URLSearchParams({ v: g.updated_at || g.version || '1' });
       const ph = new URLSearchParams(location.search).get('peerhost');      // nur für Tests
       if (ph) q.set('peerhost', ph);
-      el.innerHTML = `<iframe class="upframe" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock" allowfullscreen src="${esc(g.file_path)}?${q}"></iframe>`;
+      if (hub.intent && hub.intent.join) q.set('join', hub.intent.join);    // Einladung: direkt in den Raum
+      el.innerHTML = `<iframe class="upframe" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock; web-share; clipboard-write" allowfullscreen src="${esc(g.file_path)}?${q}"></iframe>`;
       const frame = el.querySelector('iframe');
       frame.addEventListener('load', () => { try { window.JV_WATCH(frame.contentWindow, g.title); } catch (e) { /* fremde Seite */ } });
       frame.focus();
@@ -394,7 +484,7 @@
 
   /* ---------- Umschalten: Startseite, Spiel, Admin ---------- */
   // Im Spiel bleibt am PC die Kopfzeile sichtbar (das Spiel beginnt darunter), am Handy gibt es Vollbild.
-  const SECTIONS = ['spiele', 'stand', 'arbeit'];
+  const SECTIONS = ['spiele', 'rangliste', 'stand', 'arbeit'];
   const inGame = () => document.body.classList.contains('in-game');
   function setInGame(on) {
     document.body.classList.toggle('in-game', on);
@@ -403,7 +493,9 @@
   addEventListener('resize', () => { if (inGame()) setInGame(true); });
   let current = null;
   function route() {
-    const id = location.hash.slice(1);
+    let [id, arg] = decodeURIComponent(location.hash.slice(1)).split('/');
+    // Einladungs-Link #spiel/CODE: direkt beitreten, danach die Adresse aufräumen
+    if (arg && /^[A-Za-z0-9]{4}$/.test(arg)) { hub.intent = { join: arg.toUpperCase() }; history.replaceState(null, '', location.pathname + location.search + '#' + id); }
     if (id === 'admin') {
       if (current) { try { current.stop(); } catch (e) { } current = null; $('#game').innerHTML = ''; }
       $('#game').hidden = true; setInGame(false); demo.pause();

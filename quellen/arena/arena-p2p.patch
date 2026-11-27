@@ -1,6 +1,6 @@
 diff -ruN a/client/package.json b/client/package.json
---- a/client/package.json	2026-11-27 11:09:10.247205604 +0100
-+++ b/client/package.json	2026-11-27 11:09:10.248572871 +0100
+--- a/client/package.json	2026-11-27 12:15:11.588598105 +0100
++++ b/client/package.json	2026-11-27 12:15:11.589983779 +0100
 @@ -14,6 +14,7 @@
      "@fontsource/barlow": "^5.0.0",
      "@fontsource/barlow-condensed": "^5.0.0",
@@ -9,9 +9,23 @@ diff -ruN a/client/package.json b/client/package.json
      "three": "^0.187.0"
    },
    "devDependencies": {
+diff -ruN a/client/src/main.ts b/client/src/main.ts
+--- a/client/src/main.ts	2026-11-27 12:15:11.565809054 +0100
++++ b/client/src/main.ts	2026-11-27 12:15:11.567115982 +0100
+@@ -17,6 +17,10 @@
+   onJoin: async (code) => startGame(await Connection.join(code)),
+ });
+ 
++// Einladungs-Link (nur im Online-Modus ohne eigenen Server): ?join=1234 tritt direkt dem Raum bei.
++const inviteCode = new URLSearchParams(location.search).get("join");
++if (import.meta.env.VITE_NET === "p2p" && inviteCode && /^\d{4}$/.test(inviteCode)) startScreen.joinWith(inviteCode);
++
+ async function startGame(connection: Connection): Promise<void> {
+   // Schrift für den Code auf dem Arenaboden vorab laden (sonst erscheint er in Ersatzschrift).
+   await document.fonts.load('700 100px "Barlow Condensed"').catch(() => {});
 diff -ruN a/client/src/net/Connection.ts b/client/src/net/Connection.ts
---- a/client/src/net/Connection.ts	2026-11-27 11:09:10.217431850 +0100
-+++ b/client/src/net/Connection.ts	2026-11-27 11:09:10.218945527 +0100
+--- a/client/src/net/Connection.ts	2026-11-27 12:15:11.541958981 +0100
++++ b/client/src/net/Connection.ts	2026-11-27 12:15:11.543677261 +0100
 @@ -20,6 +20,12 @@
  /** Fehler mit einem Text, den man dem Spieler direkt zeigen kann. */
  export class ConnectionError extends Error {}
@@ -57,7 +71,7 @@ diff -ruN a/client/src/net/Connection.ts b/client/src/net/Connection.ts
        return new Connection(room);
 diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
 --- a/client/src/net/browser/P2P.ts	1970-01-01 01:00:00.000000000 +0100
-+++ b/client/src/net/browser/P2P.ts	2026-11-27 11:09:10.251341386 +0100
++++ b/client/src/net/browser/P2P.ts	2026-11-27 12:15:11.592936409 +0100
 @@ -0,0 +1,309 @@
 +/**
 + * Online spielen ohne eigenen Spiel-Server (für die JointVenture-Seite).
@@ -370,7 +384,7 @@ diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
 +}
 diff -ruN a/client/src/net/browser/colyseus-shim.ts b/client/src/net/browser/colyseus-shim.ts
 --- a/client/src/net/browser/colyseus-shim.ts	1970-01-01 01:00:00.000000000 +0100
-+++ b/client/src/net/browser/colyseus-shim.ts	2026-11-27 11:09:10.251375399 +0100
++++ b/client/src/net/browser/colyseus-shim.ts	2026-11-27 12:15:11.592967224 +0100
 @@ -0,0 +1,97 @@
 +/**
 + * Ersatz für das Paket "colyseus", damit der Spiel-Raum (server/src/rooms/ArenaRoom.ts)
@@ -469,9 +483,51 @@ diff -ruN a/client/src/net/browser/colyseus-shim.ts b/client/src/net/browser/col
 +    this.onDispose();
 +  }
 +}
+diff -ruN a/client/src/net/browser/invite.ts b/client/src/net/browser/invite.ts
+--- a/client/src/net/browser/invite.ts	1970-01-01 01:00:00.000000000 +0100
++++ b/client/src/net/browser/invite.ts	2026-11-27 12:15:11.592978128 +0100
+@@ -0,0 +1,38 @@
++/**
++ * Mitspieler einladen (nur im Online-Modus ohne eigenen Server, also auf der JointVenture-Seite).
++ *
++ * Der Link führt direkt in den Raum: eingebettet in JointVenture als ".../#arena/1234",
++ * sonst als "...?join=1234". main.ts tritt dann von selbst bei.
++ */
++
++/** Link, über den ein Freund direkt in diesen Raum kommt. */
++export function inviteLink(code: string): string {
++  try {
++    if (window.parent !== window) {
++      const page = window.parent.location;
++      return `${page.origin}${page.pathname}#arena/${code}`;
++    }
++  } catch {
++    // Eingebettet in eine fremde Seite: dann den eigenen Link nehmen.
++  }
++  return `${location.origin}${location.pathname}?join=${code}`;
++}
++
++/**
++ * Einladung verschicken. Am Handy öffnet sich das Teilen-Menü (darin WhatsApp),
++ * am PC WhatsApp im Browser. Gibt zurück, was passiert ist.
++ */
++export async function inviteFriend(code: string): Promise<"geteilt" | "whatsapp" | "abgebrochen"> {
++  const url = inviteLink(code);
++  const text = `Ich fordere dich in der Arena heraus! Tipp auf den Link, dann bist du direkt in meinem Raum (Code ${code}): ${url}`;
++  if (navigator.maxTouchPoints > 0 && typeof navigator.share === "function") {
++    try {
++      await navigator.share({ text });
++      return "geteilt";
++    } catch {
++      return "abgebrochen";
++    }
++  }
++  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
++  return "whatsapp";
++}
 diff -ruN a/client/src/styles.css b/client/src/styles.css
---- a/client/src/styles.css	2026-11-27 11:09:10.233453552 +0100
-+++ b/client/src/styles.css	2026-11-27 11:09:10.235038473 +0100
+--- a/client/src/styles.css	2026-11-27 12:15:11.573653530 +0100
++++ b/client/src/styles.css	2026-11-27 12:15:20.660750092 +0100
 @@ -1161,3 +1161,20 @@
  .bar-stamina {
    display: none;
@@ -493,10 +549,75 @@ diff -ruN a/client/src/styles.css b/client/src/styles.css
 +.start-back:hover {
 +  color: var(--kreide);
 +}
+diff -ruN a/client/src/ui/Hud.ts b/client/src/ui/Hud.ts
+--- a/client/src/ui/Hud.ts	2026-11-27 12:15:11.558114069 +0100
++++ b/client/src/ui/Hud.ts	2026-11-27 12:15:11.559751948 +0100
+@@ -4,6 +4,10 @@
+  * und die Flächen für Joystick (links) und Umschauen (rechts).
+  */
+ import { CHARACTERS, ELEMENT_COLORS, skillById, weaponOf, type BotBehavior, type CameraMode } from "@ron/shared";
++import { inviteFriend } from "../net/browser/invite";
++
++/** Einladen per Link gibt es nur im Online-Modus ohne eigenen Server (Build mit VITE_NET=p2p). */
++const CAN_INVITE = import.meta.env.VITE_NET === "p2p";
+ 
+ /** Umfang des Abklingzeit-Rings (Kreis mit Radius 46). */
+ const RING_LENGTH = 2 * Math.PI * 46;
+@@ -113,6 +117,8 @@
+   private readonly botButtons: HTMLButtonElement[];
+   private readonly botHintEl: HTMLElement;
+   private readonly botInvite: HTMLButtonElement;
++  /** "Freund einladen" (nur im Online-Modus ohne eigenen Server). */
++  private readonly friendInvite: HTMLButtonElement | null;
+ 
+   constructor(parent: HTMLElement, roomCode: string, cameraMode: CameraMode, callbacks: HudCallbacks) {
+     const isTouch = navigator.maxTouchPoints > 0;
+@@ -131,6 +137,7 @@
+           <strong>Raum ${roomCode}</strong>
+           <span class="room-status-text"></span>
+           <button type="button" class="hud-button bot-invite" hidden>Gegen Bot üben</button>
++          ${CAN_INVITE ? '<button type="button" class="hud-button bot-invite friend-invite" hidden>Freund einladen</button>' : ""}
+         </div>
+         <div class="hud-top-buttons">
+           <button type="button" class="hud-button settings-open">Einstellungen</button>
+@@ -330,6 +337,14 @@
+     this.botHintEl = this.root.querySelector(".bot-hint")!;
+     this.botInvite = this.root.querySelector(".bot-invite")!;
+     this.botInvite.addEventListener("click", () => callbacks.onBotChange("kampf"));
++    this.friendInvite = this.root.querySelector(".friend-invite");
++    this.friendInvite?.addEventListener("click", () => {
++      void inviteFriend(roomCode).then((result) => {
++        if (result === "abgebrochen" || !this.friendInvite) return;
++        this.friendInvite.textContent = "Einladung verschickt";
++        setTimeout(() => this.friendInvite && (this.friendInvite.textContent = "Freund einladen"), 3000);
++      });
++    });
+     this.setBotState(null, true);
+   }
+ 
+@@ -345,6 +360,7 @@
+     this.selectBot(behavior ?? "aus");
+     for (const b of this.botButtons) b.disabled = !available;
+     this.botInvite.hidden = !(available && behavior === null);
++    if (this.friendInvite) this.friendInvite.hidden = this.botInvite.hidden;
+     this.botHintEl.textContent = available
+       ? "Zum Üben allein. Solange der Bot da ist, kann kein Mitspieler beitreten."
+       : "Nicht möglich, solange ein Mitspieler im Raum ist.";
 diff -ruN a/client/src/ui/StartScreen.ts b/client/src/ui/StartScreen.ts
---- a/client/src/ui/StartScreen.ts	2026-11-27 11:09:10.226627084 +0100
-+++ b/client/src/ui/StartScreen.ts	2026-11-27 11:09:10.228177732 +0100
-@@ -58,6 +58,16 @@
+--- a/client/src/ui/StartScreen.ts	2026-11-27 12:15:11.549990366 +0100
++++ b/client/src/ui/StartScreen.ts	2026-11-27 12:15:11.551722941 +0100
+@@ -15,8 +15,10 @@
+   private readonly messageEl: HTMLElement;
+   private readonly codeInput: HTMLInputElement;
+   private readonly buttons: HTMLButtonElement[];
++  private readonly callbacks: StartScreenCallbacks;
+ 
+   constructor(parent: HTMLElement, callbacks: StartScreenCallbacks) {
++    this.callbacks = callbacks;
+     const len = NET.roomCodeLength;
+     // Der Hinweis mit der Handy-Adresse ist nur am PC sinnvoll.
+     const showLanHint = __LAN_URL__ !== "" && ["localhost", "127.0.0.1"].includes(location.hostname);
+@@ -58,6 +60,16 @@
      `;
      parent.appendChild(this.root);
  
@@ -513,9 +634,22 @@ diff -ruN a/client/src/ui/StartScreen.ts b/client/src/ui/StartScreen.ts
      this.messageEl = this.root.querySelector(".start-message")!;
      this.codeInput = this.root.querySelector(".code-input")!;
      this.buttons = [...this.root.querySelectorAll<HTMLButtonElement>("button")];
+@@ -83,6 +95,12 @@
+     });
+   }
+ 
++  /** Direkt einem Raum beitreten (z. B. über einen Einladungs-Link). */
++  joinWith(code: string): void {
++    this.codeInput.value = code;
++    void this.run(() => this.callbacks.onJoin(code));
++  }
++
+   /** Aktion ausführen, währenddessen Buttons sperren, Fehler als Text zeigen. */
+   private async run(action: () => Promise<void>): Promise<void> {
+     this.showMessage("");
 diff -ruN a/client/vite.config.ts b/client/vite.config.ts
---- a/client/vite.config.ts	2026-11-27 11:09:10.240459978 +0100
-+++ b/client/vite.config.ts	2026-11-27 11:09:10.241748367 +0100
+--- a/client/vite.config.ts	2026-11-27 12:15:11.581182625 +0100
++++ b/client/vite.config.ts	2026-11-27 12:15:11.582637926 +0100
 @@ -1,4 +1,5 @@
  import os from "node:os";
 +import { fileURLToPath } from "node:url";

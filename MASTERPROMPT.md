@@ -75,6 +75,8 @@ Admin-Panel → Spiele → „Neues Spiel oder Beta-Version hochladen“. Das Sp
 
 **Fehlermeldungen von Spielern:** Spieler melden über „Fehler melden“ (Tabelle `public.reports`, Bildschirmfotos im privaten Speicher `reports`). Der Admin kopiert sie mit „Für Claude kopieren“ (oder in der Konsole `claude offen`) in den Chat. Nach dem Fix: `update public.reports set status = 'erledigt', admin_note = 'Kurze Antwort an den Spieler', updated_at = now() where id = <nr>;` Die Antwort sieht der Spieler bei „Deine Meldungen“.
 
+**Rangliste, Profil, Einladen:** Rangliste über die Datenbank-Funktion `public.leaderboard(p_game)` (nur Online-Duelle, nur für Angemeldete). Profilbilder im öffentlichen Speicher `avatars` (`<user-id>/avatar-<zeit>.webp`, Spalte `profiles.avatar_path`). Einladungs-Links haben die Form `…/#<spiel>/<CODE>`; `hub.intent.join` enthält dann den Code, Spiele treten damit direkt bei (Air-Hockey: `startJoin`, Arena: `?join=` im Rahmen). `hub.invite(spiel, code)` teilt per WhatsApp.
+
 **Vor jedem Hochladen:** `tools/version.sh` ausführen. Es hängt an CSS und JavaScript in `index.html` eine neue Versionsnummer, damit Browser und GitHub-Zwischenspeicher sofort die neuen Dateien laden.
 
 **Status-Werte:** `live` Spielbar · `beta` Beta · `soon` Bald · `hidden` Versteckt · `review` Zur Freigabe.

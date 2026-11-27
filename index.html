@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=202611271207">
+<link rel="stylesheet" href="css/style.css?v=202611271221">
 </head>
 <body>
 <div id="hub">
@@ -24,7 +24,7 @@
         <span class="site-name">JointVenture</span>
       </a>
       <nav class="links" aria-label="Bereiche">
-        <a href="#spiele">Spiele</a><a href="#stand">Spielstände</a><a href="#arbeit">In Arbeit</a>
+        <a href="#spiele">Spiele</a><a href="#rangliste">Rangliste</a><a href="#stand">Spielstände</a><a href="#arbeit">In Arbeit</a>
       </nav>
       <button class="bugbtn" id="reportBtn" type="button" title="Fehler melden" aria-label="Fehler melden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7.5a4 4 0 0 1 8 0M7 10h10v4a5 5 0 0 1-10 0zM12 10v9M3 13h4M17 13h4M4 8l3 2.5M20 8l-3 2.5M4.5 19l3-2.2M19.5 19l-3-2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fehler melden</span></button>
       <a class="admin-link" id="adminLink" href="#admin" hidden>Admin</a>
@@ -71,6 +71,11 @@
       <div class="games" id="games"></div>
     </section>
 
+    <section class="wrap block" id="rangliste" aria-labelledby="hRang">
+      <div class="block-head"><h2 id="hRang">Rangliste</h2><p>Es zählen nur Online-Duelle gegen echte Gegner.</p></div>
+      <div class="panel rank"><div class="chips" id="rankFilter"></div><div id="rankBox"><p class="empty">Lädt …</p></div></div>
+    </section>
+
     <section class="wrap block" id="stand" aria-labelledby="hStand">
       <div class="block-head"><h2 id="hStand">Spielstände</h2><p id="standHint">Auf diesem Gerät gespeichert.</p></div>
       <div class="stand" id="standBox"></div>
@@ -87,14 +92,14 @@
 
 <div id="game" hidden></div>
 
-<script src="js/errors.js?v=202611271207"></script>
-<script src="js/config.js?v=202611271207"></script>
-<script src="js/net.js?v=202611271207"></script>
-<script src="js/auth.js?v=202611271207"></script>
-<script src="js/content.js?v=202611271207"></script>
-<script src="js/games/airhockey.js?v=202611271207"></script>
-<script src="js/admin.js?v=202611271207"></script>
-<script src="js/console.js?v=202611271207"></script>
-<script src="js/hub.js?v=202611271207"></script>
+<script src="js/errors.js?v=202611271221"></script>
+<script src="js/config.js?v=202611271221"></script>
+<script src="js/net.js?v=202611271221"></script>
+<script src="js/auth.js?v=202611271221"></script>
+<script src="js/content.js?v=202611271221"></script>
+<script src="js/games/airhockey.js?v=202611271221"></script>
+<script src="js/admin.js?v=202611271221"></script>
+<script src="js/console.js?v=202611271221"></script>
+<script src="js/hub.js?v=202611271221"></script>
 </body>
 </html>

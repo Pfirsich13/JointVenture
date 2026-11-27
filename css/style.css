@@ -342,3 +342,42 @@ body.in-game #mainView,body.in-game #adminView,body.in-game #maint,body.in-game 
   .acct.in{padding:4px}
   .acct.in #acctTxt{display:none}
 }
+/* Rangliste */
+.rank{padding:18px}
+.rank .chips{margin-bottom:12px}
+.rank .chips:empty{display:none}
+.rank-table,.stat-table{width:100%;border-collapse:collapse;font-size:15px}
+.rank-table th,.stat-table th{text-align:left;color:var(--mute);font-weight:600;font-size:13px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.rank-table td,.stat-table td{padding:10px;border-bottom:1px solid var(--line)}
+.rank-table tr:last-child td,.stat-table tr:last-child td{border-bottom:0}
+.rank-table td:first-child{width:56px;font-weight:700}
+.rank-table td:nth-child(n+3),.rank-table th:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+.rank-table tr.me td{background:rgba(76,125,255,.12)}
+.rank-table tr.me td:first-child{border-radius:10px 0 0 10px}.rank-table tr.me td:last-child{border-radius:0 10px 10px 0}
+.rank-table small,.stat-table small{color:var(--mute)}
+.rank-login{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.rank-login p{margin:0;color:var(--mute)}
+@media (max-width:520px){.rank{padding:12px}.rank-table th,.rank-table td{padding:8px 6px}.rank-table th:nth-child(4),.rank-table td:nth-child(4){display:none}}
+/* Profil */
+.prof-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.prof-head h3{margin:0}
+.prof-head p{margin:2px 0 0!important}
+.av.big{width:54px;height:54px;font-size:22px}
+.prof-name .f>span{font-size:13px;color:var(--mute)}
+.prof-name .inline{display:flex;gap:8px;align-items:flex-start}
+.prof-name .inline .field{margin:0}
+.prof-name .inline .btn{min-height:50px}
+.sheet h4{margin:18px 0 6px;font:700 15px/1.2 var(--display)}
+.stat-table b.w{color:var(--ok)}.stat-table b.l{color:#ff9aa4}
+.stat-table td:nth-child(n+2),.stat-table th:nth-child(n+2){text-align:center}
+.prof-rank{margin:12px 0 4px!important;color:var(--ink)!important}
+.sheet .row.wrap-row{flex-wrap:wrap}
+/* Profilbilder */
+.av{overflow:hidden}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av.sm{width:28px;height:28px;font-size:12px}
+.rank-who{display:inline-flex;align-items:center;gap:10px;font-weight:600}
+.av.big{width:72px;height:72px;font-size:28px}
+.pic-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.btn.small{min-height:36px;padding:0 12px;font-size:13px;cursor:pointer}
+.pic-msg{margin:0 0 6px!important}

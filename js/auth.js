@@ -17,7 +17,7 @@
 (function () {
   const S = window.SITE || {};
   const configured = !!(S.supabaseUrl && S.supabaseKey);
-  let client = null, user = null, profileName = '', role = 'player', failed = false, loaded = false;
+  let client = null, user = null, profileName = '', role = 'player', avatarPath = null, failed = false, loaded = false;
   const listeners = [];
   const emit = () => listeners.forEach((fn) => { try { fn(user); } catch (e) { console.error(e); } });
 
@@ -30,13 +30,14 @@
   }
 
   async function loadProfile() {
-    profileName = ''; role = 'player';
+    profileName = ''; role = 'player'; avatarPath = null;
     if (!user) return;
     profileName = (user.user_metadata && user.user_metadata.name) || '';
     try {
-      const { data } = await client.from('profiles').select('name,role').eq('id', user.id).maybeSingle();
+      const { data } = await client.from('profiles').select('name,role,avatar_path').eq('id', user.id).maybeSingle();
       if (data && data.name) profileName = data.name;
       if (data && data.role) role = data.role;
+      if (data) avatarPath = data.avatar_path || null;
     } catch (e) { /* Tabelle fehlt: Name aus den Metadaten */ }
   }
 
@@ -59,7 +60,10 @@
     const m = String((e && e.message) || e || '');
     if (/Invalid login/i.test(m)) return 'E-Mail oder Passwort stimmt nicht.';
     if (/already registered|already exists/i.test(m)) return 'Diese E-Mail ist schon registriert. Melde dich an.';
-    if (/Password should be/i.test(m)) return 'Das Passwort muss mindestens 6 Zeichen haben.';
+    if (/Password should contain|weak password|weak_password/i.test(m)) return 'Das Passwort ist zu schwach: mindestens 8 Zeichen, mit Buchstaben und Zahlen.';
+    if (/Password should be at least (\d+)/i.test(m)) return `Das Passwort muss mindestens ${m.match(/at least (\d+)/i)[1]} Zeichen haben.`;
+    if (/Password should be/i.test(m)) return 'Das Passwort muss mindestens 8 Zeichen haben, mit Buchstaben und Zahlen.';
+    if (/pwned|leaked|compromised/i.test(m)) return 'Dieses Passwort ist aus einem Datenleck bekannt. Bitte wähle ein anderes.';
     if (/Email not confirmed/i.test(m)) return 'Bitte bestätige zuerst deine E-Mail (Link im Postfach).';
     if (/valid email|invalid.*email/i.test(m)) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
     if (/signups? (are|is) disabled|signup.*not allowed/i.test(m)) return 'Registrieren ist bei Supabase gerade ausgeschaltet (Authentication → Sign In / Providers).';
@@ -68,6 +72,22 @@
     return m || 'Das hat nicht geklappt.';
   };
 
+  // Bild mittig quadratisch zuschneiden und verkleinern (spart Speicher und Ladezeit)
+  function squareImage(file, size) {
+    return new Promise((resolve, reject) => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const s = Math.min(img.naturalWidth, img.naturalHeight), c = document.createElement('canvas');
+        c.width = c.height = size;
+        const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high';
+        cx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
+        URL.revokeObjectURL(url);
+        c.toBlob((b) => b ? resolve(b) : reject(new Error('Bild konnte nicht verarbeitet werden.')), 'image/webp', 0.86);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Dieses Bild kann der Browser nicht öffnen. Versuch ein JPG oder PNG.')); };
+      img.src = url;
+    });
+  }
   const need = () => { if (!client) throw new Error('Die Anmeldung ist gerade nicht erreichbar. Bitte später nochmal versuchen.'); };
   window.Auth = {
     get ready() { return configured && !failed; },
@@ -95,6 +115,46 @@
       need();
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw new Error(deErr(error));
+    },
+    /** Öffentliche Adresse eines Profilbilds (oder null) */
+    avatarUrl(path) { return path && client ? client.storage.from('avatars').getPublicUrl(path).data.publicUrl : null; },
+    /** Profilbild des angemeldeten Spielers (oder null) */
+    avatar() { return Auth.avatarUrl(avatarPath); },
+    /** Neues Profilbild: wird quadratisch auf 256 px verkleinert und hochgeladen */
+    async setAvatar(file) {
+      need(); if (!user) throw new Error('Bitte melde dich zuerst an.');
+      if (!/^image\//.test(file.type)) throw new Error('Bitte ein Bild auswählen (JPG, PNG oder WebP).');
+      if (file.size > 15 * 1024 * 1024) throw new Error('Das Bild ist zu groß (höchstens 15 MB).');
+      const blob = await squareImage(file, 256);
+      const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
+      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+      const up = await client.storage.from('avatars').upload(path, blob, { contentType: blob.type, cacheControl: '31536000' });
+      if (up.error) throw new Error('Hochladen ging nicht: ' + deErr(up.error));
+      const { error } = await client.from('profiles').update({ avatar_path: path }).eq('id', user.id);
+      if (error) { await client.storage.from('avatars').remove([path]); throw new Error(deErr(error)); }
+      const old = avatarPath; avatarPath = path; emit();
+      if (old) client.storage.from('avatars').remove([old]);    // altes Bild aufräumen
+    },
+    async removeAvatar() {
+      need(); if (!user || !avatarPath) return;
+      const { error } = await client.from('profiles').update({ avatar_path: null }).eq('id', user.id);
+      if (error) throw new Error(deErr(error));
+      const old = avatarPath; avatarPath = null; emit();
+      client.storage.from('avatars').remove([old]);
+    },
+    /** Rangliste (nur Online-Duelle). game = null für alle Spiele */
+    async leaderboard(game) {
+      if (!client || !user) return null;
+      const { data, error } = await client.rpc('leaderboard', { p_game: game || null });
+      if (error) { console.warn(error); return null; }
+      return data || [];
+    },
+    /** Alle eigenen Ergebnisse (für die Profil-Statistik) */
+    async myStats() {
+      if (!client || !user) return [];
+      const { data, error } = await client.from('results').select('game,mode,won').eq('user_id', user.id).limit(5000);
+      if (error) { console.warn(error); return []; }
+      return data || [];
     },
     /** Fehlermeldung senden (mit optionalem Bildschirmfoto) */
     async report({ game, title, description, context, shot }) {
