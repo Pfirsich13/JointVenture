@@ -73,6 +73,8 @@ Admin-Panel → Spiele → „Neues Spiel oder Beta-Version hochladen“. Das Sp
 
 **Arena (Spiel des Bruders) aktualisieren:** Neue ZIP entpacken, `patch -p1 < quellen/arena/arena-p2p.patch` anwenden (macht das Spiel ohne eigenen Server online spielbar: der Raum-Ersteller rechnet, der Mitspieler verbindet sich per PeerJS), `npm install`, dann im Ordner `client`: `VITE_NET=p2p npx vite build --base ./ --outDir dist-web`. Inhalt von `dist-web` nach `play/arena/`, dann `update public.games set version = '…', status = 'review', updated_at = now() where id = 'arena';`. Details: `quellen/arena/LIESMICH.md`.
 
+**Vor jedem Hochladen:** `tools/version.sh` ausführen. Es hängt an CSS und JavaScript in `index.html` eine neue Versionsnummer, damit Browser und GitHub-Zwischenspeicher sofort die neuen Dateien laden.
+
 **Status-Werte:** `live` Spielbar · `beta` Beta · `soon` Bald · `hidden` Versteckt · `review` Zur Freigabe.
 
 ## Definition von „fertig“
