@@ -1,7 +1,79 @@
+diff -ruN a/.gitignore b/.gitignore
+--- a/.gitignore	2026-11-27 12:36:58.082109602 +0100
++++ b/.gitignore	2026-11-27 12:36:58.083964621 +0100
+@@ -7,3 +7,8 @@
+ # Sicherungskopie des Grundgerüsts: reine Kopie, gehört nicht in den Verlauf
+ _BACKUP_*/
+ _Drive-Export/
++
++# Build für die JointVenture-Seite (Für JointVenture bauen.bat)
++dist-jointventure/
++dist-web/
++JointVenture-Arena.zip
+diff -ruN "a/F\303\274r JointVenture bauen.bat" "b/F\303\274r JointVenture bauen.bat"
+--- "a/F\303\274r JointVenture bauen.bat"	1970-01-01 01:00:00.000000000 +0100
++++ "b/F\303\274r JointVenture bauen.bat"	2026-11-27 12:36:58.154069022 +0100
+@@ -0,0 +1,40 @@
++@echo off
++rem Baut die Arena fuer die JointVenture-Seite und packt sie in JointVenture-Arena.zip.
++rem Danach auf der Seite: Admin, Spiele, Arena-PvP, Neue Version hochladen.
++cd /d "%~dp0"
++title Arena fuer JointVenture bauen
++
++if not exist node_modules (
++  echo Erster Start: Pakete werden geladen. Das dauert ein paar Minuten ...
++  call npm install
++  if errorlevel 1 (
++    echo.
++    echo Das Laden der Pakete hat nicht geklappt. Bitte Internetverbindung pruefen.
++    pause
++    exit /b 1
++  )
++)
++
++echo Baue die Arena fuer JointVenture ...
++call npm run build:jointventure -w client
++if errorlevel 1 (
++  echo.
++  echo Das Bauen hat nicht geklappt. Die Fehlermeldung steht oben.
++  pause
++  exit /b 1
++)
++
++if exist JointVenture-Arena.zip del JointVenture-Arena.zip
++powershell -NoProfile -Command "Compress-Archive -Path client\dist-jointventure\* -DestinationPath JointVenture-Arena.zip"
++if errorlevel 1 (
++  echo.
++  echo Das Packen hat nicht geklappt.
++  pause
++  exit /b 1
++)
++
++echo.
++echo Fertig: JointVenture-Arena.zip liegt in diesem Ordner.
++echo Jetzt auf der Seite: Admin, Spiele, Arena-PvP, "Neue Version hochladen" und die ZIP waehlen.
++explorer /select,"%~dp0JointVenture-Arena.zip"
++pause
+diff -ruN a/client/.env.jointventure b/client/.env.jointventure
+--- a/client/.env.jointventure	1970-01-01 01:00:00.000000000 +0100
++++ b/client/.env.jointventure	2026-11-27 12:36:58.152591680 +0100
+@@ -0,0 +1,3 @@
++# Build für die JointVenture-Seite (npm run build:jointventure):
++# online spielen ohne eigenen Spiel-Server, siehe src/net/browser/P2P.ts
++VITE_NET=p2p
 diff -ruN a/client/package.json b/client/package.json
---- a/client/package.json	2026-11-27 12:15:11.588598105 +0100
-+++ b/client/package.json	2026-11-27 12:15:11.589983779 +0100
-@@ -14,6 +14,7 @@
+--- a/client/package.json	2026-11-27 12:36:58.092890794 +0100
++++ b/client/package.json	2026-11-27 12:36:58.094502721 +0100
+@@ -7,13 +7,15 @@
+     "dev": "vite",
+     "build": "vite build",
+     "preview": "vite preview",
+-    "typecheck": "tsc --noEmit -p tsconfig.json"
++    "typecheck": "tsc --noEmit -p tsconfig.json",
++    "build:jointventure": "vite build --mode jointventure --base ./ --outDir dist-jointventure --emptyOutDir"
+   },
+   "dependencies": {
+     "@colyseus/sdk": "^0.18.10",
      "@fontsource/barlow": "^5.0.0",
      "@fontsource/barlow-condensed": "^5.0.0",
      "@ron/shared": "*",
@@ -10,22 +82,30 @@ diff -ruN a/client/package.json b/client/package.json
    },
    "devDependencies": {
 diff -ruN a/client/src/main.ts b/client/src/main.ts
---- a/client/src/main.ts	2026-11-27 12:15:11.565809054 +0100
-+++ b/client/src/main.ts	2026-11-27 12:15:11.567115982 +0100
-@@ -17,6 +17,10 @@
+--- a/client/src/main.ts	2026-11-27 12:36:58.107154216 +0100
++++ b/client/src/main.ts	2026-11-27 12:36:58.108384458 +0100
+@@ -9,6 +9,7 @@
+ import { Game } from "./game/Game";
+ import { Connection } from "./net/Connection";
+ import { StartScreen } from "./ui/StartScreen";
++import { pageParams } from "./net/browser/params";
+ 
+ const app = document.getElementById("app")!;
+ 
+@@ -17,6 +18,10 @@
    onJoin: async (code) => startGame(await Connection.join(code)),
  });
  
 +// Einladungs-Link (nur im Online-Modus ohne eigenen Server): ?join=1234 tritt direkt dem Raum bei.
-+const inviteCode = new URLSearchParams(location.search).get("join");
++const inviteCode = pageParams().get("join");
 +if (import.meta.env.VITE_NET === "p2p" && inviteCode && /^\d{4}$/.test(inviteCode)) startScreen.joinWith(inviteCode);
 +
  async function startGame(connection: Connection): Promise<void> {
    // Schrift für den Code auf dem Arenaboden vorab laden (sonst erscheint er in Ersatzschrift).
    await document.fonts.load('700 100px "Barlow Condensed"').catch(() => {});
 diff -ruN a/client/src/net/Connection.ts b/client/src/net/Connection.ts
---- a/client/src/net/Connection.ts	2026-11-27 12:15:11.541958981 +0100
-+++ b/client/src/net/Connection.ts	2026-11-27 12:15:11.543677261 +0100
+--- a/client/src/net/Connection.ts	2026-11-27 12:36:58.129573392 +0100
++++ b/client/src/net/Connection.ts	2026-11-27 12:36:58.131122235 +0100
 @@ -20,6 +20,12 @@
  /** Fehler mit einem Text, den man dem Spieler direkt zeigen kann. */
  export class ConnectionError extends Error {}
@@ -71,8 +151,8 @@ diff -ruN a/client/src/net/Connection.ts b/client/src/net/Connection.ts
        return new Connection(room);
 diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
 --- a/client/src/net/browser/P2P.ts	1970-01-01 01:00:00.000000000 +0100
-+++ b/client/src/net/browser/P2P.ts	2026-11-27 12:15:11.592936409 +0100
-@@ -0,0 +1,309 @@
++++ b/client/src/net/browser/P2P.ts	2026-11-27 12:36:58.150095394 +0100
+@@ -0,0 +1,310 @@
 +/**
 + * Online spielen ohne eigenen Spiel-Server (für die JointVenture-Seite).
 + *
@@ -87,6 +167,7 @@ diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
 +import type { DataConnection, Peer as PeerType, PeerOptions } from "peerjs";
 +import { ArenaRoom } from "../../../../server/src/rooms/ArenaRoom";
 +import type { Client, Room } from "./colyseus-shim";
++import { pageParams } from "./params";
 +
 +/** Macht unsere Raum-Namen beim PeerJS-Vermittler weltweit eindeutig. */
 +const PREFIX = "jointventure-arena-v1-";
@@ -182,7 +263,7 @@ diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
 +    },
 +  };
 +  // Nur zum Testen: ?peerhost=127.0.0.1:9000 benutzt einen eigenen PeerJS-Vermittler.
-+  const host = new URLSearchParams(location.search).get("peerhost");
++  const host = pageParams().get("peerhost");
 +  if (host) {
 +    const [name, port] = host.split(":");
 +    Object.assign(options, { host: name, port: Number(port) || 9000, path: "/", secure: false });
@@ -384,7 +465,7 @@ diff -ruN a/client/src/net/browser/P2P.ts b/client/src/net/browser/P2P.ts
 +}
 diff -ruN a/client/src/net/browser/colyseus-shim.ts b/client/src/net/browser/colyseus-shim.ts
 --- a/client/src/net/browser/colyseus-shim.ts	1970-01-01 01:00:00.000000000 +0100
-+++ b/client/src/net/browser/colyseus-shim.ts	2026-11-27 12:15:11.592967224 +0100
++++ b/client/src/net/browser/colyseus-shim.ts	2026-11-27 12:36:58.150123964 +0100
 @@ -0,0 +1,97 @@
 +/**
 + * Ersatz für das Paket "colyseus", damit der Spiel-Raum (server/src/rooms/ArenaRoom.ts)
@@ -485,7 +566,7 @@ diff -ruN a/client/src/net/browser/colyseus-shim.ts b/client/src/net/browser/col
 +}
 diff -ruN a/client/src/net/browser/invite.ts b/client/src/net/browser/invite.ts
 --- a/client/src/net/browser/invite.ts	1970-01-01 01:00:00.000000000 +0100
-+++ b/client/src/net/browser/invite.ts	2026-11-27 12:15:11.592978128 +0100
++++ b/client/src/net/browser/invite.ts	2026-11-27 12:36:58.150137544 +0100
 @@ -0,0 +1,38 @@
 +/**
 + * Mitspieler einladen (nur im Online-Modus ohne eigenen Server, also auf der JointVenture-Seite).
@@ -525,9 +606,29 @@ diff -ruN a/client/src/net/browser/invite.ts b/client/src/net/browser/invite.ts
 +  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
 +  return "whatsapp";
 +}
+diff -ruN a/client/src/net/browser/params.ts b/client/src/net/browser/params.ts
+--- a/client/src/net/browser/params.ts	1970-01-01 01:00:00.000000000 +0100
++++ b/client/src/net/browser/params.ts	2026-11-27 12:36:58.150150794 +0100
+@@ -0,0 +1,16 @@
++/**
++ * Startwerte für das Spiel, z. B. join=1234 (Einladungs-Link) oder peerhost=… (nur Tests).
++ *
++ * Normal stehen sie in der Adresse (?join=1234). Lädt JointVenture das Spiel als
++ * hochgeladenes Paket, steht es in einem Rahmen ohne eigene Adresse. Dann gibt die
++ * Seite die Werte über den Namen des Rahmens mit: "jv:join=1234&peerhost=…".
++ */
++export function pageParams(): URLSearchParams {
++  const params = new URLSearchParams(location.search);
++  if (window.name.startsWith("jv:")) {
++    new URLSearchParams(window.name.slice(3)).forEach((value, key) => {
++      if (!params.has(key)) params.set(key, value);
++    });
++  }
++  return params;
++}
 diff -ruN a/client/src/styles.css b/client/src/styles.css
---- a/client/src/styles.css	2026-11-27 12:15:11.573653530 +0100
-+++ b/client/src/styles.css	2026-11-27 12:15:20.660750092 +0100
+--- a/client/src/styles.css	2026-11-27 12:36:58.113396501 +0100
++++ b/client/src/styles.css	2026-11-27 12:36:58.119819446 +0100
 @@ -1161,3 +1161,20 @@
  .bar-stamina {
    display: none;
@@ -550,8 +651,8 @@ diff -ruN a/client/src/styles.css b/client/src/styles.css
 +  color: var(--kreide);
 +}
 diff -ruN a/client/src/ui/Hud.ts b/client/src/ui/Hud.ts
---- a/client/src/ui/Hud.ts	2026-11-27 12:15:11.558114069 +0100
-+++ b/client/src/ui/Hud.ts	2026-11-27 12:15:11.559751948 +0100
+--- a/client/src/ui/Hud.ts	2026-11-27 12:36:58.145395523 +0100
++++ b/client/src/ui/Hud.ts	2026-11-27 12:36:58.146895036 +0100
 @@ -4,6 +4,10 @@
   * und die Flächen für Joystick (links) und Umschauen (rechts).
   */
@@ -604,8 +705,8 @@ diff -ruN a/client/src/ui/Hud.ts b/client/src/ui/Hud.ts
        ? "Zum Üben allein. Solange der Bot da ist, kann kein Mitspieler beitreten."
        : "Nicht möglich, solange ein Mitspieler im Raum ist.";
 diff -ruN a/client/src/ui/StartScreen.ts b/client/src/ui/StartScreen.ts
---- a/client/src/ui/StartScreen.ts	2026-11-27 12:15:11.549990366 +0100
-+++ b/client/src/ui/StartScreen.ts	2026-11-27 12:15:11.551722941 +0100
+--- a/client/src/ui/StartScreen.ts	2026-11-27 12:36:58.137776164 +0100
++++ b/client/src/ui/StartScreen.ts	2026-11-27 12:36:58.139148247 +0100
 @@ -15,8 +15,10 @@
    private readonly messageEl: HTMLElement;
    private readonly codeInput: HTMLInputElement;
@@ -648,18 +749,20 @@ diff -ruN a/client/src/ui/StartScreen.ts b/client/src/ui/StartScreen.ts
    private async run(action: () => Promise<void>): Promise<void> {
      this.showMessage("");
 diff -ruN a/client/vite.config.ts b/client/vite.config.ts
---- a/client/vite.config.ts	2026-11-27 12:15:11.581182625 +0100
-+++ b/client/vite.config.ts	2026-11-27 12:15:11.582637926 +0100
+--- a/client/vite.config.ts	2026-11-27 12:36:58.100132520 +0100
++++ b/client/vite.config.ts	2026-11-27 12:36:58.101446903 +0100
 @@ -1,4 +1,5 @@
  import os from "node:os";
 +import { fileURLToPath } from "node:url";
  import { defineConfig } from "vite";
  import { qrcode } from "vite-plugin-qrcode";
  
-@@ -28,6 +29,13 @@
+@@ -27,7 +28,14 @@
+ 
  const lan = findLanAddress();
  
- export default defineConfig({
+-export default defineConfig({
++export default defineConfig(({ mode }) => ({
 +  resolve: {
 +    alias: {
 +      // Nur für den Online-Modus ohne Server (VITE_NET=p2p): Der Spiel-Raum aus /server
@@ -670,13 +773,15 @@ diff -ruN a/client/vite.config.ts b/client/vite.config.ts
    server: {
      // host: true = auch für andere Geräte im WLAN erreichbar, nicht nur für diesen PC.
      host: true,
-@@ -35,7 +43,8 @@
+@@ -35,8 +43,9 @@
      strictPort: true,
    },
    define: {
 -    __LAN_URL__: JSON.stringify(lan ? `http://${lan}:${CLIENT_PORT}` : ""),
 +    // Im Online-Build ohne Server (VITE_NET=p2p) gibt es keinen Heimnetz-Hinweis.
-+    __LAN_URL__: JSON.stringify(lan && process.env.VITE_NET !== "p2p" ? `http://${lan}:${CLIENT_PORT}` : ""),
++    __LAN_URL__: JSON.stringify(lan && mode !== "jointventure" && process.env.VITE_NET !== "p2p" ? `http://${lan}:${CLIENT_PORT}` : ""),
    },
    // Zeigt im Startfenster einen QR-Code, den man mit dem Handy scannen kann.
    plugins: [qrcode()],
+-});
++}));

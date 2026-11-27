@@ -30,7 +30,7 @@
   const PAGE_PATH = /^play\/[a-z0-9-]+\/[\w.-]+\.html$/;     // Spiele mit eigenem Ordner auf dieser Seite
   const BUILTIN_PLAYABLE = (g) => g.kind === 'builtin' && (g.status !== 'soon');
   const playable = (g) => g && (g.status === 'live' || g.status === 'beta' || (adminOnly(g) && isAdmin()))
-    && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path) || (g.kind === 'page' && PAGE_PATH.test(g.file_path || '')));
+    && (BUILTIN_PLAYABLE(g) || (g.kind === 'upload' && g.file_path) || (g.kind === 'page' && PAGE_PATH.test(g.file_path || '')) || (g.kind === 'bundle' && g.file_path));
   const STATUS = { live: ['Spielbar', 'ok'], beta: ['Beta', 'beta'], soon: ['Bald', ''], hidden: ['Versteckt', 'off'], review: ['Zur Freigabe', 'review'] };
   const loadedScripts = {};
   function loadGameModule(id) {
@@ -470,10 +470,36 @@
       const ph = new URLSearchParams(location.search).get('peerhost');      // nur für Tests
       if (ph) q.set('peerhost', ph);
       if (hub.intent && hub.intent.join) q.set('join', hub.intent.join);    // Einladung: direkt in den Raum
-      el.innerHTML = `<iframe class="upframe" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock; web-share; clipboard-write" allowfullscreen src="${esc(g.file_path)}?${q}"></iframe>`;
+      el.innerHTML = `<iframe class="upframe" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock; web-share; clipboard-write" src="${esc(g.file_path)}?${q}"></iframe>`;
       const frame = el.querySelector('iframe');
       frame.addEventListener('load', () => { try { window.JV_WATCH(frame.contentWindow, g.title); } catch (e) { /* fremde Seite */ } });
       frame.focus();
+    },
+    stop() { }
+  };
+  /* ---------- Spiel aus einer hochgeladenen ZIP (Dateien im Speicher) ---------- */
+  // Die Startseite des Spiels wird geladen und mit <base> auf den Speicher-Ordner gezeigt.
+  // Der Rahmen läuft wie ein Teil der Seite (wie play/…), deshalb nur Spiele von Admins.
+  const bundlePlayer = {
+    start(el, g) {
+      const params = new URLSearchParams();
+      if (hub.intent && hub.intent.join) params.set('join', hub.intent.join);             // Einladung: direkt in den Raum
+      const ph = new URLSearchParams(location.search).get('peerhost'); if (ph) params.set('peerhost', ph);   // nur für Tests
+      // Startwerte fürs Spiel stehen im Namen des Rahmens (muss beim Anlegen schon da sein)
+      el.innerHTML = `<iframe class="upframe" name="${esc('jv:' + params)}" title="${esc(g.title)}" allow="fullscreen; autoplay; gamepad; screen-wake-lock; web-share; clipboard-write"></iframe>
+        <div class="g-panel" id="upLoad"><div class="box"><h2>Lädt …</h2><div class="wait"><i></i><i></i><i></i></div></div></div>`;
+      const frame = el.querySelector('iframe');
+      const url = Content.fileUrl(g.file_path, g.updated_at), dir = url.split('?')[0].replace(/index\.html$/, '');
+      fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); }).then((html) => {
+        const head = `<base href="${esc(dir)}"><script>try{parent.JV_WATCH(window,${JSON.stringify(g.title).replace(/</g, "\\u003c")})}catch(e){}<\/script>`;
+        frame.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + head) : head + html;
+        const load = el.querySelector('#upLoad'); if (load) load.remove();
+        frame.focus();
+      }).catch(() => {
+        const box = el.querySelector('#upLoad .box'); if (!box) return;
+        box.innerHTML = '<h2>Ups</h2><p>Das Spiel konnte nicht geladen werden. Internet prüfen und nochmal versuchen.</p><button class="btn" type="button" data-b>Zurück</button>';
+        box.querySelector('[data-b]').onclick = () => hub.back();
+      });
     },
     stop() { }
   };
@@ -517,7 +543,7 @@
       setInGame(true); $('#game').hidden = false; demo.pause();
       if (!current) {
         const token = current = { id, mod: { stop() { } } };
-        const player = g.kind === 'page' ? pagePlayer : uploadPlayer;
+        const player = g.kind === 'page' ? pagePlayer : g.kind === 'bundle' ? bundlePlayer : uploadPlayer;
         const starting = g.kind === 'builtin' ? loadGameModule(g.id) : Promise.resolve({ start: (el) => player.start(el, g), stop() { } });
         if (g.kind === 'builtin' && !(window.Games && window.Games[g.id])) $('#game').innerHTML = '<div class="g-panel"><div class="box"><h2>Lädt …</h2><div class="wait"><i></i><i></i><i></i></div></div></div>';
         starting.then((mod) => {

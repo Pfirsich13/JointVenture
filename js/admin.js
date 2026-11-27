@@ -257,9 +257,87 @@
     const { error } = await db().storage.from('games').upload(path, blob, { upsert: true, contentType: asText ? 'text/plain' : file.type, cacheControl: '60' });
     if (error) throw error;
   }
+  /* ---------- Spiele als ZIP (fertiger Ordner mit index.html, z. B. ein Vite-Build) ---------- */
+  const MIME = { html: 'text/plain', htm: 'text/plain', js: 'text/javascript', mjs: 'text/javascript', css: 'text/css', json: 'application/json', map: 'application/json',
+    svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', ico: 'image/x-icon',
+    woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4',
+    mp4: 'video/mp4', webm: 'video/webm', wasm: 'application/wasm', glb: 'model/gltf-binary', gltf: 'model/gltf+json', txt: 'text/plain', xml: 'application/xml' };
+  const isZip = (f) => !!f && (/\.zip$/i.test(f.name) || /zip/.test(f.type));
+  let zipLib = null;
+  function loadZipLib() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    return zipLib || (zipLib = new Promise((resolve, reject) => {
+      const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      sc.onload = () => resolve(window.JSZip); sc.onerror = () => { zipLib = null; reject(new Error('Das ZIP-Werkzeug konnte nicht geladen werden. Internet prüfen.')); };
+      document.head.appendChild(sc);
+    }));
+  }
+  // ZIP lesen und prüfen: Startdatei index.html ganz oben oder in genau einem Ordner
+  async function readGameZip(file) {
+    if (file.size > 80 * 1024 * 1024) throw new Error('Die ZIP ist größer als 80 MB.');
+    const JSZip = await loadZipLib(), zip = await JSZip.loadAsync(file), all = [];
+    zip.forEach((path, entry) => {
+      const p = path.replace(/\\/g, '/').replace(/^\/+/, '');      // Windows-ZIPs haben manchmal Backslashes
+      if (!entry.dir && !/(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|desktop\.ini$)/i.test(p)) all.push({ path: p, entry });
+    });
+    const names = all.map((x) => x.path);
+    let prefix = null;
+    if (names.includes('index.html')) prefix = '';
+    else { const c = names.filter((n) => /^[^/]+\/index\.html$/.test(n)); if (c.length === 1) prefix = c[0].slice(0, -10); }
+    const source = 'Das ist Quellcode, kein fertiges Spiel. Bei der Arena: im Projektordner „Für JointVenture bauen.bat“ doppelklicken und die neue Datei JointVenture-Arena.zip hochladen.';
+    if (prefix === null) throw new Error(names.some((n) => /(^|\/)package\.json$/.test(n)) ? source : 'In der ZIP fehlt die Startdatei index.html (ganz oben oder in einem Ordner).');
+    const indexHtml = await zip.file(all.find((x) => x.path === prefix + 'index.html').entry.name).async('string');
+    if (/src=["'][^"']*\.(ts|tsx|jsx)["']/i.test(indexHtml) || /src=["']\/src\//i.test(indexHtml)) throw new Error(source);
+    const files = all.filter((x) => x.path.startsWith(prefix)).map((x) => ({ rel: x.path.slice(prefix.length), entry: x.entry }));
+    if (files.length > 1000) throw new Error('Die ZIP enthält mehr als 1000 Dateien.');
+    return files;
+  }
+  // Alle Dateien eines Ordners im Speicher (auch in Unterordnern)
+  async function listAll(prefix) {
+    const { data, error } = await db().storage.from('games').list(prefix, { limit: 1000 });
+    if (error) throw error;
+    const out = [];
+    for (const it of data || []) {
+      const path = prefix ? `${prefix}/${it.name}` : it.name;
+      if (it.id) out.push(path); else out.push(...await listAll(path));
+    }
+    return out;
+  }
+  async function removeFolder(prefix) {
+    const paths = await listAll(prefix);
+    for (let i = 0; i < paths.length; i += 100) await db().storage.from('games').remove(paths.slice(i, i + 100));
+  }
+  // Paket hochladen: jede Version in einen eigenen Ordner, damit nichts Altes zwischengespeichert stört
+  async function uploadBundle(id, file, step) {
+    step('Entpacke …');
+    const files = await readGameZip(file), dir = `${id}/v${Date.now()}`;
+    let done = 0;
+    const upOne = async (f) => {
+      const ext = (f.rel.split('.').pop() || '').toLowerCase(), type = MIME[ext] || 'application/octet-stream';
+      const blob = new Blob([await f.entry.async('arraybuffer')], { type });
+      const { error } = await db().storage.from('games').upload(`${dir}/${f.rel}`, blob, { contentType: type, cacheControl: '31536000', upsert: true });
+      if (error) throw new Error(`${f.rel}: ${error.message || error}`);
+      step(`Lade hoch: ${++done} von ${files.length} Dateien …`);
+    };
+    try {
+      for (let i = 0; i < files.length; i += 4) await Promise.all(files.slice(i, i + 4).map(upOne));   // 4 gleichzeitig
+    } catch (err) { await removeFolder(dir).catch(() => { }); throw err; }
+    return `${dir}/index.html`;
+  }
+  // Alte Spieldateien nach einer neuen Version aufräumen (Titelbild bleibt)
+  async function removeOldGameFiles(g) {
+    if (g.kind === 'bundle' && g.file_path) await removeFolder(g.file_path.replace(/\/index\.html$/, ''));
+    if (g.kind === 'upload' && g.file_path) await db().storage.from('games').remove([g.file_path]);
+  }
+  function checkGameFile(file) {
+    if (!file) return 'Bitte eine Spieldatei auswählen (.html oder .zip).';
+    if (isZip(file)) return file.size > 80 * 1024 * 1024 ? 'Die ZIP ist größer als 80 MB.' : '';
+    return checkHtml(file);
+  }
+
   function checkHtml(file) {
     if (!file) return 'Bitte eine HTML-Datei auswählen.';
-    if (!/\.html?$/i.test(file.name)) return 'Die Spieldatei muss eine .html-Datei sein.';
+    if (!/\.html?$/i.test(file.name)) return 'Die Spieldatei muss eine .html-Datei oder eine .zip sein.';
     if (file.size > 20 * 1024 * 1024) return 'Die Datei ist größer als 20 MB.';
     return '';
   }
@@ -277,14 +355,14 @@
     body.innerHTML = `
       <details class="panel new" ${list.length ? '' : 'open'}><summary>+ Neues Spiel, Beta-Version oder Platzhalter</summary>
         <form class="form" id="newGame">
-          <p class="hint">Ein Spiel ist eine einzelne HTML-Datei, in der alles steckt (wie der Arena-Prototyp). Es läuft abgeschirmt in einem eigenen Rahmen.</p>
+          <p class="hint">Entweder eine einzelne <b>HTML-Datei</b>, in der alles steckt (läuft abgeschirmt in einem eigenen Rahmen), oder eine <b>ZIP</b> mit einem fertigen Spiel-Ordner (index.html plus Dateien, z. B. JointVenture-Arena.zip). Spiele aus einer ZIP laufen wie ein Teil der Seite, also nur eigene Spiele hochladen.</p>
           <label class="f"><span>Titel</span><input class="field" name="title" maxlength="40" required></label>
           <label class="f"><span>Kurzname für die Adresse (automatisch)</span><input class="field" name="id" maxlength="40" required></label>
           <label class="f"><span>Beschreibung</span><textarea class="field" name="description" maxlength="200" rows="2"></textarea></label>
           <div class="f2"><label class="f"><span>Status</span><select class="field" name="status">${STATUS_OPTS.map(([v, n]) => `<option value="${v}" ${v === 'beta' ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label class="f"><span>Version</span><input class="field" name="version" maxlength="20" value="0.1"></label></div>
           <label class="check"><input type="checkbox" name="placeholder"> <span>Nur Platzhalter, ohne Datei (erscheint als „Bald“)</span></label>
-          <label class="f" data-filebox><span>Spieldatei (.html)</span><input class="field" name="file" type="file" accept=".html,.htm,text/html"></label>
+          <label class="f" data-filebox><span>Spieldatei (.html oder .zip)</span><input class="field" name="file" type="file" accept=".html,.htm,.zip,text/html,application/zip"></label>
           <label class="f"><span>Titelbild (optional)</span><input class="field" name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label>
           <p class="msg"></p>
           <div class="row"><button class="btn primary" type="submit">Hochladen</button></div>
@@ -303,17 +381,20 @@
     nf.addEventListener('submit', async (e) => {
       e.preventDefault(); const msg = nf.querySelector('.msg'); msg.textContent = '';
       const id = slug(nf.elements.id.value), file = nf.elements.file.files[0], cover = nf.elements.cover.files[0], ph = nf.elements.placeholder.checked;
-      const problem = (!/^[a-z0-9-]{2,40}$/.test(id) && 'Kurzname: nur a-z, 0-9 und Bindestrich, mind. 2 Zeichen.') || (list.some((g) => g.id === id) && 'Diesen Kurznamen gibt es schon.') || ['admin'].includes(id) && 'Dieser Kurzname ist reserviert.' || (!ph && checkHtml(file)) || checkImg(cover);
+      const problem = (!/^[a-z0-9-]{2,40}$/.test(id) && 'Kurzname: nur a-z, 0-9 und Bindestrich, mind. 2 Zeichen.') || (list.some((g) => g.id === id) && 'Diesen Kurznamen gibt es schon.') || ['admin'].includes(id) && 'Dieser Kurzname ist reserviert.' || (!ph && checkGameFile(file)) || checkImg(cover);
       if (problem) { msg.textContent = problem; return; }
       const btn = nf.querySelector('[type=submit]'); busy(btn, true);
       try {
-        if (!ph) await uploadFile(`${id}/index.html`, file, true);
+        const zipped = !ph && isZip(file);
+        let file_path = null;
+        if (zipped) file_path = await uploadBundle(id, file, (t) => { msg.textContent = t; });
+        else if (!ph) { await uploadFile(`${id}/index.html`, file, true); file_path = `${id}/index.html`; }
         let cover_path = null;
         if (cover) { cover_path = `${id}/cover.${imgExt(cover)}`; await uploadFile(cover_path, cover, false); }
         const maxSort = list.reduce((m, g) => Math.max(m, g.sort), 0);
         const { error: err } = await db().from('games').insert({
           id, title: nf.elements.title.value.trim(), description: nf.elements.description.value.trim(), status: ph ? 'soon' : nf.elements.status.value,
-          kind: ph ? 'builtin' : 'upload', file_path: ph ? null : `${id}/index.html`, cover_path, version: ph ? null : (nf.elements.version.value.trim() || null), sort: maxSort + 10, updated_at: now()
+          kind: ph ? 'builtin' : zipped ? 'bundle' : 'upload', file_path, cover_path, version: ph ? null : (nf.elements.version.value.trim() || null), sort: maxSort + 10, updated_at: now()
         });
         if (err) throw err;
         await saved(ph ? 'Platzhalter angelegt' : 'Spiel hochgeladen'); show();
@@ -333,15 +414,14 @@
         await saved('Reihenfolge geändert'); show();
       }
       if (b.dataset.act === 'del') {
-        const question = g.kind === 'upload'
-          ? `„${g.title}“ wirklich löschen? Die hochgeladene Spieldatei wird mit gelöscht. Das kann nicht rückgängig gemacht werden.`
+        const question = g.kind === 'upload' || g.kind === 'bundle'
+          ? `„${g.title}“ wirklich löschen? Die hochgeladenen Spieldateien werden mit gelöscht. Das kann nicht rückgängig gemacht werden.`
           : isPlaceholder(g)
             ? `Platzhalter „${g.title}“ löschen?`
             : `„${g.title}“ von der Seite löschen? Die Kachel verschwindet für alle. Der Spiel-Code bleibt im Projekt gespeichert, Claude kann das Spiel jederzeit wieder eintragen.`;
         if (!confirm(question)) return;
         try {
-          const { data: files } = await db().storage.from('games').list(g.id);
-          if (files && files.length) await db().storage.from('games').remove(files.map((f) => `${g.id}/${f.name}`));
+          await removeFolder(g.id);
           const { error: err } = await db().from('games').delete().eq('id', g.id); if (err) throw err;
           await saved('Spiel gelöscht'); show();
         } catch (err) { fail(err); }
@@ -351,26 +431,29 @@
       e.preventDefault(); const f = e.target, id = f.closest('[data-id]').dataset.id, g = list.find((x) => x.id === id);
       const msg = f.querySelector('.msg'); msg.textContent = '';
       const file = f.elements.file && f.elements.file.files[0], cover = f.elements.cover && f.elements.cover.files[0];
-      const problem = (file && checkHtml(file)) || checkImg(cover);
+      const problem = (file && (g.kind === 'upload' ? checkGameFile(file) : (isZip(file) ? '' : 'Für dieses Spiel bitte eine .zip hochladen.'))) || checkImg(cover);
       if (problem) { msg.textContent = problem; return; }
       const btn = f.querySelector('[type=submit]'); busy(btn, true);
       try {
         const upd = { title: f.elements.title.value.trim() || g.title, description: f.elements.description.value.trim(), status: f.elements.status.value, version: f.elements.version.value.trim() || null, updated_at: now() };
-        if (file) { await uploadFile(`${id}/index.html`, file, true); upd.file_path = `${id}/index.html`; }
+        if (file && isZip(file)) { upd.file_path = await uploadBundle(id, file, (t) => { msg.textContent = t; }); upd.kind = 'bundle'; }
+        else if (file) { await uploadFile(`${id}/index.html`, file, true); upd.file_path = `${id}/index.html`; }
+        if (file) upd.status = 'review';                   // neue Version: erst testen, dann freigeben
         if (cover) { upd.cover_path = `${id}/cover.${imgExt(cover)}`; await uploadFile(upd.cover_path, cover, false); }
         else if (f.elements.dropCover && f.elements.dropCover.checked) upd.cover_path = null;
         // altes Bild mit anderer Endung (z. B. .png statt .webp) aufräumen
         const oldCover = g.cover_path && g.cover_path !== upd.cover_path && 'cover_path' in upd ? g.cover_path : null;
         const { error: err } = await db().from('games').update(upd).eq('id', id); if (err) throw err;
         if (oldCover) await db().storage.from('games').remove([oldCover]);
-        await saved(file ? 'Neue Version hochgeladen' : cover ? 'Titelbild gespeichert' : 'Spiel gespeichert'); show();
+        if (upd.file_path && upd.file_path !== g.file_path) await removeOldGameFiles(g).catch((x) => console.warn('Alte Dateien bleiben liegen:', x));
+        await saved(file ? 'Neue Version hochgeladen: wartet auf Freigabe' : cover ? 'Titelbild gespeichert' : 'Spiel gespeichert'); show();
       } catch (err) { msg.textContent = 'Fehler: ' + (err.message || err); busy(btn, false); }
     });
   }
   const isPlaceholder = (g) => g.kind === 'builtin' && g.status === 'soon';
-  const KIND_LABEL = (g) => g.kind === 'upload' ? 'Hochgeladen' : g.kind === 'page' ? 'Eigener Ordner' : isPlaceholder(g) ? 'Platzhalter' : 'Eingebaut';
+  const KIND_LABEL = (g) => g.kind === 'upload' ? 'Hochgeladen (HTML)' : g.kind === 'bundle' ? 'Hochgeladen (ZIP)' : g.kind === 'page' ? 'Eigener Ordner' : isPlaceholder(g) ? 'Platzhalter' : 'Eingebaut';
   function gameCard(g, i, n) {
-    const up = g.kind === 'upload';
+    const up = g.kind === 'upload' || g.kind === 'bundle' || g.kind === 'page';
     return `<article class="panel card ${g.status === 'review' ? 'pending' : ''}" data-id="${esc(g.id)}">
       ${g.status === 'review' ? `<div class="pend-note"><span>Neu, wartet auf Freigabe. <a href="${siteLink(g.id)}" ${ctx.app ? 'target="_blank" rel="noopener"' : ''}>Testen</a></span><span class="pend-btns"><button class="btn" type="button" data-release="beta">Als Beta</button><button class="btn primary" type="button" data-release="live">Spielbar</button></span></div>` : ''}
       <div class="card-head"><div><b>${esc(g.title)}</b><small>${KIND_LABEL(g)} · #${esc(g.id)}${g.updated_at ? ' · geändert ' + ago(g.updated_at) : ''}</small></div>
@@ -380,7 +463,7 @@
         <label class="f"><span>Beschreibung</span><textarea class="field" name="description" maxlength="200" rows="2">${esc(g.description)}</textarea></label>
         <div class="f2"><label class="f"><span>Status</span><select class="field" name="status">${STATUS_OPTS.map(([v, nm]) => `<option value="${v}" ${v === g.status ? 'selected' : ''}>${nm}</option>`).join('')}</select></label>
         <label class="f"><span>Version</span><input class="field" name="version" maxlength="20" value="${esc(g.version || '')}"></label></div>
-        ${up ? `<label class="f"><span>Neue Version hochladen (.html, optional)</span><input class="field" name="file" type="file" accept=".html,.htm,text/html"></label>` : ''}
+        ${up ? `<label class="f"><span>Neue Version hochladen (${g.kind === 'upload' ? '.html oder .zip' : '.zip'}, optional). Danach steht das Spiel auf „Zur Freigabe“.</span><input class="field" name="file" type="file" accept="${g.kind === 'upload' ? '.html,.htm,.zip,text/html,application/zip' : '.zip,application/zip'}"></label>` : ''}
         <div class="cover-edit">${g.cover_path ? `<img class="cover-thumb" src="${esc(Content.fileUrl(g.cover_path, g.updated_at))}" alt="Aktuelles Titelbild">` : ''}
           <label class="f"><span>Titelbild ${g.cover_path ? 'ersetzen' : 'hinzufügen'} (optional, PNG, JPG oder WebP)</span><input class="field" name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label></div>
         ${g.cover_path ? '<label class="check"><input type="checkbox" name="dropCover"> <span>Eigenes Titelbild entfernen</span></label>' : ''}
@@ -547,15 +630,7 @@
       out.tabellen[t] = rows;
     }
     const bucket = db().storage.from('games');
-    const { data: top, error } = await bucket.list('', { limit: 1000 });
-    if (error) throw error;
-    const paths = [];
-    for (const item of top || []) {
-      if (item.id) { paths.push(item.name); continue; }   // Datei direkt im Speicher
-      const { data: files, error: e2 } = await bucket.list(item.name, { limit: 1000 });
-      if (e2) throw e2;
-      (files || []).filter((f) => f.id).forEach((f) => paths.push(`${item.name}/${f.name}`));
-    }
+    const paths = await listAll('');
     for (const path of paths) {
       step(`Lade ${path} …`);
       const { data: blob, error: e3 } = await bucket.download(path);

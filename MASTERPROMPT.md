@@ -71,7 +71,9 @@ Admin-Panel → Spiele → „Neues Spiel oder Beta-Version hochladen“. Das Sp
 1. Fertigen Build nach `play/<id>/` legen (mit relativen Pfaden bauen: `--base ./`). Startdatei `play/<id>/index.html`.
 2. In Supabase: `kind = 'page'`, `file_path = 'play/<id>/index.html'`, Status `review`. Die Seite öffnet das Spiel im ganzen Fenster. Ein Knopf im Spiel kann mit `window.parent.postMessage({ type: 'jv-back' }, '*')` zur Spieleauswahl zurückführen.
 
-**Arena (Spiel des Bruders) aktualisieren:** Neue ZIP entpacken, `patch -p1 < quellen/arena/arena-p2p.patch` anwenden (macht das Spiel ohne eigenen Server online spielbar: der Raum-Ersteller rechnet, der Mitspieler verbindet sich per PeerJS), `npm install`, dann im Ordner `client`: `VITE_NET=p2p npx vite build --base ./ --outDir dist-web`. Inhalt von `dist-web` nach `play/arena/`, dann `update public.games set version = '…', status = 'review', updated_at = now() where id = 'arena';`. Details: `quellen/arena/LIESMICH.md`.
+**Weg D – Spiel als ZIP im Admin hochladen (z. B. die Arena):** Admin → Spiele → „Neues Spiel …“ oder bei einem Spiel „Neue Version hochladen“, eine ZIP mit fertigem Spiel-Ordner (index.html plus Dateien) wählen. Die Seite entpackt sie im Browser, legt die Dateien in den Speicher `games/<id>/v<zeit>/` (Typ `bundle`) und setzt das Spiel auf `review`. Quellcode-ZIPs werden abgelehnt.
+
+**Arena (Spiel von Tim) aktualisieren:** Tim doppelklickt im Projekt „Für JointVenture bauen.bat“ (entsteht durch `quellen/arena/arena-p2p.patch`) und lädt `JointVenture-Arena.zip` im Admin hoch. Details: `quellen/arena/LIESMICH.md`.
 
 **Fehlermeldungen von Spielern:** Spieler melden über „Fehler melden“ (Tabelle `public.reports`, Bildschirmfotos im privaten Speicher `reports`). Der Admin kopiert sie mit „Für Claude kopieren“ (oder in der Konsole `claude offen`) in den Chat. Nach dem Fix: `update public.reports set status = 'erledigt', admin_note = 'Kurze Antwort an den Spieler', updated_at = now() where id = <nr>;` Die Antwort sieht der Spieler bei „Deine Meldungen“.
 
