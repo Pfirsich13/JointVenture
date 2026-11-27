@@ -2,7 +2,7 @@
 
 Unsere private PvP-Spieleseite (JointVenture): Startseite mit Spielekacheln, Echtzeit-Duelle von Handy zu Handy.
 
-- **Spielen:** https://pfirsich13.github.io/soutgames.com/
+- **Spielen:** https://pfirsich13.github.io/JointVenture/
 - **Aufs iPhone als App:** Link in Safari öffnen → Teilen → „Zum Home-Bildschirm“
 
 ## Aufbau
