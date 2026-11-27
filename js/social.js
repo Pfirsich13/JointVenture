@@ -35,7 +35,7 @@
   /* ---------- Hilfen ---------- */
   function avatar(p, cls) {
     p = p || {};
-    const url = p.avatar_path && Auth.avatarUrl ? Auth.avatarUrl(p.avatar_path) : '';
+    const url = p.url || (p.avatar_path && Auth.avatarUrl ? Auth.avatarUrl(p.avatar_path) : '');
     const letter = ((p.name || '?')[0] || '?').toUpperCase();
     return `<span class="av ${cls || 'sm'}"${p.id ? ` data-uid="${esc(p.id)}"` : ''}>${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : esc(letter)}</span>`;
   }
@@ -277,17 +277,25 @@
   }
 
   /* ---------- Nachrichten anzeigen (Privat und Lobby) ---------- */
-  function msgHtml(m, kind) {
-    const mine = m.sender === state.uid, p = prof(m.sender);
-    const name = kind === 'lobby' ? (m.sender_name || p.name || 'Spieler') : p.name;
+  // Wer schreibt: Profilbild und Name stehen an jeder Nachricht, die einen neuen Block beginnt.
+  // Weitere Nachrichten derselben Person innerhalb von 5 Minuten hängen direkt darunter.
+  function who(m, kind) {
+    if (m.sender === state.uid) return { id: m.sender, name: Auth.name() || 'Du', url: Auth.avatar ? Auth.avatar() : '' };
+    const p = prof(m.sender);
+    return { id: m.sender, name: (kind === 'lobby' && m.sender_name) || p.name || 'Spieler', avatar_path: p.avatar_path };
+  }
+  function msgHtml(m, kind, prev) {
+    const mine = m.sender === state.uid, w = who(m, kind), name = w.name;
+    const cont = prev && prev.sender === m.sender && dayLabel(prev.created_at) === dayLabel(m.created_at)
+      && new Date(m.created_at) - new Date(prev.created_at) < 5 * 60e3;
     const tick = mine && kind === 'chat' ? `<span class="tick${m.read_at ? ' read' : ''}" title="${m.read_at ? 'Gelesen' : 'Gesendet'}" aria-label="${m.read_at ? 'Gelesen' : 'Gesendet'}">${m.read_at ? '✓✓' : '✓'}</span>` : '';
     const acts = [];
     if (!mine) acts.push(`<button class="sbtn" type="button" data-mreport="${m.id}">Melden</button>`);
     if (kind === 'lobby' && (mine || isAdmin())) acts.push(`<button class="sbtn bad" type="button" data-ldel="${m.id}">Löschen</button>`);
     if (kind === 'lobby' && isAdmin() && !mine) acts.push(`<button class="sbtn" type="button" data-mute="${esc(m.sender)}">Stummschalten</button>`);
-    return `<div class="msg-row${mine ? ' mine' : ''}" data-mid="${m.id}">
-      ${kind === 'lobby' && !mine ? avatar({ id: m.sender, name, avatar_path: p.avatar_path }) : ''}
-      <div class="msg-col">${kind === 'lobby' && !mine ? `<span class="msg-name">${esc(name)}</span>` : ''}
+    return `<div class="msg-row${mine ? ' mine' : ''}${cont ? ' cont' : ''}" data-mid="${m.id}">
+      ${cont ? '<span class="msg-gap" aria-hidden="true"></span>' : avatar(w)}
+      <div class="msg-col">${cont ? '' : `<span class="msg-name">${esc(name)}${mine ? ' <small>(du)</small>' : ''}</span>`}
         <div class="bubble"${acts.length ? ' data-bubble="1" role="button" tabindex="0" aria-expanded="false" title="Antippen für Melden"' : ''}><span class="msg-t">${textHtml(m.body)}</span><span class="msg-meta">${hhmm(m.created_at)}${tick}</span></div>
         ${acts.length ? `<div class="msg-act" hidden>${acts.join('')}</div>` : ''}</div></div>`;
   }
@@ -298,7 +306,7 @@
     const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 80, oldH = body.scrollHeight, oldTop = body.scrollTop;
     let html = more && list.length ? '<p class="so-older">Hochscrollen lädt ältere Nachrichten</p>' : '', day = '';
     if (!list.length) html = `<p class="empty so-hello">${kind === 'lobby' ? 'Noch ist es ruhig in der Lobby. Sag Hallo!' : `Schreib ${esc(prof(chat.with).name)} die erste Nachricht.`}</p>`;
-    list.forEach((m) => { const d = dayLabel(m.created_at); if (d !== day) { day = d; html += `<p class="so-day"><span>${d}</span></p>`; } html += msgHtml(m, kind); });
+    list.forEach((m, i) => { const d = dayLabel(m.created_at); if (d !== day) { day = d; html += `<p class="so-day"><span>${d}</span></p>`; } html += msgHtml(m, kind, list[i - 1]); });
     box.innerHTML = html;
     if (scroll === 'bottom' || (scroll === 'auto' && atBottom)) body.scrollTop = body.scrollHeight;
     else if (scroll === 'keep') body.scrollTop = oldTop + (body.scrollHeight - oldH);
