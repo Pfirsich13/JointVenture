@@ -78,6 +78,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#241a24;color:var(--in
 @media (max-height:430px){#pad{transform:scale(calc(var(--ps,1)*.84))}}
 #settings{position:fixed;inset:0;z-index:20;display:none;place-items:center;padding:16px;background:rgba(10,6,10,.82);overflow:auto;touch-action:pan-y}
 #settings.show{display:grid}
+#settings h3{margin:14px 0 4px;font-size:19px;color:var(--gold)}
+.kb{min-width:110px;min-height:34px;font:700 15px Rajdhani,sans-serif;border-radius:9px;border:2px solid rgba(255,255,255,.25);background:rgba(0,0,0,.4);color:inherit;cursor:pointer}
+.kb.wait{border-color:var(--gold);color:var(--gold)}
+@media (orientation:portrait){#pad{transform:scale(calc(var(--ps,1)*.78))}}
 #settings .card{background:rgba(30,20,26,.96);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:16px 18px;text-align:left}
 #settings h2{margin:0 0 10px;font-size:28px;text-align:center}
 .srow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:9px 0;font-size:16px}
@@ -117,6 +121,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#241a24;color:var(--in
   <label class="srow">Blut-Effekte <input type="checkbox" id="bloodOpt"></label>
   <label class="srow">Schaden als Zahl anzeigen <input type="checkbox" id="sDmg"></label>
   <label class="srow">Vibration (Handy) <input type="checkbox" id="sVib"></label>
+  <h3>Handy</h3>
+  <label class="srow">Touch-Knöpfe <select id="sPad"><option value="auto">Automatisch</option><option value="on">Immer an</option><option value="off">Aus</option></select></label>
+  <label class="srow">Vollbild beim Spielstart <input type="checkbox" id="sFs"></label>
+  <label class="srow">Bildschirm bleibt an <input type="checkbox" id="sWake"></label>
+  <h3>Tastatur und Maus (PC)</h3>
+  <div id="keyRows"></div>
+  <label class="srow">Maus: links Stechen, rechts Schlagen <input type="checkbox" id="sMouse"></label>
+  <div class="srow" style="font-size:13px;opacity:.75">Auf eine Taste tippen, dann die neue Taste drücken. Esc bricht ab. Pfeiltasten laufen immer.</div>
   <button class="big" id="setClose">Fertig</button>
   <button class="big alt" id="setReset">Zurücksetzen</button>
 </div></div>
@@ -138,7 +150,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#241a24;color:var(--in
       <p><b>Handy:</b> links ziehen = laufen. Rechts: Stechen (schnell), Schlagen (stark, kann die Waffe aus der Hand schlagen), Treten (bricht den Block nur mit Abstand und nicht im Dauerfeuer), Block (halten), Ausweichen.</p>
       <p><b>Waffe:</b> Werfen wirft sie auf den Gegner. Ohne Waffe kämpfst du mit Faust und Hieb. Waffen am Boden (auch die des Gegners) mit Aufheben nehmen. <b>Neben einer Waffe treten:</b> ohne Waffe kickst du sie hoch in die Hand, mit Waffe kickst du sie auf den Gegner.</p>
       <p><b>Parieren:</b> Block genau im Moment des Treffers. Dann ist der Gegner benommen und verliert vielleicht seine Waffe.</p>
-      <p><b>PC:</b> WASD laufen, J Stechen, K Schlagen, L Treten, Shift oder I Block, Leertaste Ausweichen, E Werfen oder Aufheben.</p>
+      <p id="pcHelp"><b>PC:</b> WASD laufen, J Stechen, K Schlagen, L Treten, Shift Block, Leertaste Ausweichen, E Werfen oder Aufheben.</p>
     </div>
     <div id="port">Tipp: Handy quer halten.</div>
   </div>
@@ -612,10 +624,17 @@ function sparks(f){
 }
 // Blut: Tropfen fliegen, landen im Sand und bleiben dort als Flecken
 /* ===== Einstellungen (werden im Browser gespeichert) ===== */
-const SET_DEFAULT={name:'Du',gfx:'high',cam:'1',btn:'1',bot:'normal',blood:true,dmg:true,vib:true};
+const KEY_ACTIONS=[['up','Hoch'],['down','Runter'],['left','Links'],['right','Rechts'],['stab','Stechen'],['slash','Schlagen'],['kick','Treten'],['block','Block (halten)'],['dodge','Ausweichen'],['act','Werfen / Aufheben']];
+const KEYS_DEFAULT={up:'KeyW',down:'KeyS',left:'KeyA',right:'KeyD',stab:'KeyJ',slash:'KeyK',kick:'KeyL',block:'ShiftLeft',dodge:'Space',act:'KeyE'};
+const SET_DEFAULT={name:'Du',gfx:'high',cam:'1',btn:'1',bot:'normal',blood:true,dmg:true,vib:true,pad:'auto',fs:true,wake:true,mouse:true,keys:KEYS_DEFAULT};
+const cloneDef=()=>JSON.parse(JSON.stringify(SET_DEFAULT));
+const isTouch=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
+function keyName(c){c=String(c||'');const m={Space:'Leertaste',ShiftLeft:'Shift links',ShiftRight:'Shift rechts',ControlLeft:'Strg links',ControlRight:'Strg rechts',AltLeft:'Alt',Enter:'Enter',Tab:'Tab',ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',Backspace:'Rücktaste',CapsLock:'Feststell'};
+  return m[c]||c.replace(/^Key/,'').replace(/^Digit/,'').replace(/^Numpad/,'Num ')||'–'}
 const BOT_LEVEL={easy:{react:1.4,hit:.6},normal:{react:.8,hit:1},hard:{react:.45,hit:1.3}};
-let SET=Object.assign({},SET_DEFAULT);
-try{const raw=JSON.parse(localStorage.getItem('jv_settings')||'null');if(raw&&typeof raw==='object')for(const k in SET_DEFAULT)if(typeof raw[k]===typeof SET_DEFAULT[k])SET[k]=raw[k]}catch(e){}
+let SET=cloneDef();
+try{const raw=JSON.parse(localStorage.getItem('jv_settings')||'null');if(raw&&typeof raw==='object'){for(const k in SET_DEFAULT)if(k!=='keys'&&typeof raw[k]===typeof SET_DEFAULT[k])SET[k]=raw[k];
+  if(raw.keys&&typeof raw.keys==='object')for(const a in KEYS_DEFAULT)if(typeof raw.keys[a]==='string')SET.keys[a]=raw.keys[a].slice(0,30)}}catch(e){}
 try{if(localStorage.getItem('glad_blood')==='0')SET.blood=false}catch(e){}
 function saveSet(){try{localStorage.setItem('jv_settings',JSON.stringify(SET))}catch(e){}}
 function applySet(){
@@ -625,6 +644,9 @@ function applySet(){
   crowd.visible=SET.gfx!=='low';
   if(typeof resize==='function')resize();
   document.documentElement.style.setProperty('--ps',SET.btn);
+  const ph=document.getElementById('pcHelp');if(ph){const K=SET.keys,n=keyName;ph.innerHTML='';const b=document.createElement('b');b.textContent='PC: ';ph.append(b,`${n(K.up)} ${n(K.left)} ${n(K.down)} ${n(K.right)} laufen, ${n(K.stab)} Stechen, ${n(K.slash)} Schlagen, ${n(K.kick)} Treten, ${n(K.block)} Block, ${n(K.dodge)} Ausweichen, ${n(K.act)} Werfen oder Aufheben`+(SET.mouse?'. Maus: links Stechen, rechts Schlagen.':'.'))}
+  if(typeof showPad==='function')showPad();
+  if(typeof wake==='function')wake();
   bloodOn=SET.blood;if(!bloodOn&&typeof clearBlood==='function')clearBlood();
   const n=document.getElementById('meName');if(n)n.textContent=SET.name;
 }
@@ -847,10 +869,11 @@ function startSolo(){
   mode='solo';me.home='me';me.setClass(myClass);bot.setClass(myClass==='sword'?'spear':'sword');bot.home='bot';
   bot.m.g.visible=true;remote.m.g.visible=false;enterGame();newMatch();
 }
-function enterGame(){$('#menu').classList.add('hide');$('#pad').style.display='block';$('#tools').style.display='flex';$('#opName').textContent=mode==='solo'?'Bot':'Gegner'}
+function enterGame(){mobileStart();$('#menu').classList.add('hide');$('#pad').style.display='block';showPad();$('#tools').style.display='flex';$('#opName').textContent=mode==='solo'?'Bot':'Gegner'}
 function toMenu(){
   if(net){try{if(net!==roomNS&&net.leave)net.leave().catch(()=>{});else net.presence({g:null}).catch(()=>{})}catch(e){}}
   net=null;oppPeer=null;mode=null;started=false;roundEnd=0;clearWorld();
+  wake();
   bot.m.g.visible=false;remote.m.g.visible=false;me.reset(0,0,0);
   $('#menu').classList.remove('hide');$('#pad').style.display='none';$('#tools').style.display='none';$('#status').textContent='';
   $('#note').textContent=(roomNS||JV)?'Online bereit: Raum erstellen und den Code deinem Bruder sagen.':'Online ist hier nicht verfügbar. Training geht immer.';
@@ -859,15 +882,42 @@ function toMenu(){
 /* ===== Eingabe ===== */
 const keys={};let stick=null,jx=0,jy=0,blockHeld=false;
 function actButton(){if(me.wt)me.throwWeapon();else if(!me.pickup())floatText(me,'Keine Waffe in der Nähe','#ccc')}
-addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;keys[e.code]=true;if(!mode||e.repeat)return;
-  if(e.code==='Space'){me.dodge(...getMove());e.preventDefault()}
-  if(e.code==='KeyJ')me.attack('stab');if(e.code==='KeyK')me.attack('slash');if(e.code==='KeyL')me.attack('kick');
-  if(e.code==='KeyE')actButton();});
+let rebind=null;
+addEventListener('keydown',e=>{
+  if(rebind){e.preventDefault();e.stopPropagation();const a=rebind;rebind=null;
+    if(e.code!=='Escape'){const old=SET.keys[a];for(const o in SET.keys)if(o!==a&&SET.keys[o]===e.code)SET.keys[o]=old;SET.keys[a]=e.code;saveSet();applySet()}
+    drawKeys();return}
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;keys[e.code]=true;if(!mode||e.repeat)return;
+  if($('#settings').classList.contains('show'))return;
+  const K=SET.keys;if(Object.values(K).includes(e.code)||e.code.startsWith('Arrow'))e.preventDefault();
+  if(e.code===K.dodge)me.dodge(...getMove());
+  if(e.code===K.stab)me.attack('stab');if(e.code===K.slash)me.attack('slash');if(e.code===K.kick)me.attack('kick');
+  if(e.code===K.act)actButton();},true);
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
+function drawKeys(){const box=$('#keyRows');box.innerHTML='';
+  for(const [a,label] of KEY_ACTIONS){const row=document.createElement('div');row.className='srow';const t=document.createElement('span');t.textContent=label;
+    const b=document.createElement('button');b.type='button';b.className='kb'+(rebind===a?' wait':'');b.textContent=rebind===a?'Taste drücken …':keyName(SET.keys[a]);
+    b.onclick=()=>{rebind=a;drawKeys()};row.append(t,b);box.append(row)}}
+// Maus: links Stechen, rechts Schlagen (nur am PC, nicht auf Knöpfen/Menüs)
+$('#c').addEventListener('mousedown',e=>{if(!SET.mouse||!mode)return;if(e.button===0)me.attack('stab');else if(e.button===2)me.attack('slash')});
+addEventListener('contextmenu',e=>{if(mode||e.target.closest('#pad,#stick'))e.preventDefault()});
+// Touch-Knöpfe zeigen oder verstecken
+function showPad(){const on=SET.pad==='on'||(SET.pad==='auto'&&isTouch);$('#pad').style.visibility=on?'visible':'hidden';$('#stick').style.display=on?'block':'none'}
+// Handy: Vollbild + quer, Bildschirm bleibt an
+let wakeLock=null;
+async function wake(){try{if(SET.wake&&mode&&navigator.wakeLock&&!wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null})}
+  else if((!SET.wake||!mode)&&wakeLock){wakeLock.release();wakeLock=null}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wake()});
+function mobileStart(){if(!isTouch)return;
+  if(SET.fs&&!document.fullscreenElement){try{const d=document.documentElement,r=(d.requestFullscreen||d.webkitRequestFullscreen);const pr=r&&r.call(d);
+    Promise.resolve(pr).then(()=>{try{screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}).catch(()=>{})}catch(e){}}
+  wake()}
 addEventListener('keyup',e=>{keys[e.code]=false});
 function getMove(){
   let x=jx,z=jy;
-  if(keys.KeyA||keys.ArrowLeft)x-=1;if(keys.KeyD||keys.ArrowRight)x+=1;
-  if(keys.KeyW||keys.ArrowUp)z-=1;if(keys.KeyS||keys.ArrowDown)z+=1;
+  const K=SET.keys;
+  if(keys[K.left]||keys.ArrowLeft)x-=1;if(keys[K.right]||keys.ArrowRight)x+=1;
+  if(keys[K.up]||keys.ArrowUp)z-=1;if(keys[K.down]||keys.ArrowDown)z+=1;
   return [x,z];
 }
 const sz=$('#stick'),base=$('#base'),knob=$('#knob');
@@ -890,13 +940,13 @@ hold($('#bBlock'),()=>{blockHeld=true},()=>{blockHeld=false});
 hold($('#bAct'),actButton);
 document.querySelectorAll('.pick button').forEach(b=>b.onclick=()=>{myClass=b.dataset.cls;document.querySelectorAll('.pick button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));try{localStorage.setItem('glad_cls',myClass)}catch(e){}});
 try{const c=localStorage.getItem('glad_cls');if(CLASSES[c])document.querySelector(`.pick [data-cls=${c}]`).click()}catch(e){}
-const SET_UI={sName:['name','value'],sGfx:['gfx','value'],sCam:['cam','value'],sBtn:['btn','value'],sBot:['bot','value'],bloodOpt:['blood','checked'],sDmg:['dmg','checked'],sVib:['vib','checked']};
+const SET_UI={sName:['name','value'],sGfx:['gfx','value'],sCam:['cam','value'],sBtn:['btn','value'],sBot:['bot','value'],bloodOpt:['blood','checked'],sDmg:['dmg','checked'],sVib:['vib','checked'],sPad:['pad','value'],sFs:['fs','checked'],sWake:['wake','checked'],sMouse:['mouse','checked']};
 function fillSet(){for(const id in SET_UI){const [k,p]=SET_UI[id];$('#'+id)[p]=SET[k]}}
 for(const id in SET_UI){const [k,p]=SET_UI[id];$('#'+id).addEventListener(p==='checked'?'change':'input',e=>{SET[k]=e.target[p];applySet();saveSet()})}
-function openSet(){fillSet();$('#settings').classList.add('show')}
+function openSet(){fillSet();rebind=null;drawKeys();$('#settings').classList.add('show')}
 $('#setBtn').onclick=openSet;$('#setBtn2').onclick=openSet;
-$('#setClose').onclick=()=>$('#settings').classList.remove('show');
-$('#setReset').onclick=()=>{SET=Object.assign({},SET_DEFAULT);applySet();saveSet();fillSet()};
+$('#setClose').onclick=()=>{rebind=null;$('#settings').classList.remove('show')};
+$('#setReset').onclick=()=>{SET=cloneDef();applySet();saveSet();fillSet();drawKeys()};
 applySet();
 if(window.parent!==window){$('#jvBack').hidden=false;$('#jvBack').onclick=()=>{try{window.parent.postMessage({type:'jv-back'},'*')}catch(e){}}}
 $('#soloBtn').onclick=startSolo;
@@ -947,7 +997,7 @@ function loop(){
   const paused=mode==='solo'&&$('#settings').classList.contains('show');
   if(mode&&!paused){
     const mv=getMove();
-    me.block(blockHeld||keys.KeyI||keys.ShiftLeft||keys.ShiftRight);
+    me.block(blockHeld||!!keys[SET.keys.block]);
     me.update(dt,mv[0],mv[1]);
     if(mode==='solo')botThink(dt);else netTick();
     updateWorld(dt);checkRound();
